@@ -35,17 +35,29 @@ app-mesh-optimizer .mo-parts-tiny input { width: 56px; padding: 4px; text-align:
 app-mesh-optimizer .mo-parts-tiny .btn { width: auto; margin-left: auto; padding: 4px 10px; }
 
 /* ---- viewport ---- */
-/* The empty state is a drop zone; its click goes through context.files. */
-app-mesh-optimizer .app-drop {
+/* ---- empty state: the shared .app-drop block (same in all four DREAM
+   TOOLS-born apps — keep it identical). The zone lies on --viewport-bg,
+   which is black in BOTH themes, so its ink and glass are re-pointed at
+   --lift (white in both themes) instead of the theme's text tokens. The
+   wrapper clears the top label row and the bottom HUD. ---- */
+.app-drop {
     position: absolute;
     inset: 0;
+    z-index: 6;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: 44px 16px 64px;
     pointer-events: none;
 }
-app-mesh-optimizer .app-drop sac-drop-zone {
+.app-drop sac-drop-zone {
+    --text:          color-mix(in srgb, var(--lift) 90%, transparent);
+    --text-muted:    color-mix(in srgb, var(--lift) 62%, transparent);
+    --text-dim:      color-mix(in srgb, var(--lift) 45%, transparent);
+    --glass:         color-mix(in srgb, var(--lift) 5%, var(--viewport-bg));   /* opaque: nothing shows through */
+    --hover:         color-mix(in srgb, var(--lift) 7%, transparent);
+    --border-strong: color-mix(in srgb, var(--lift) 30%, transparent);
+    --drop-zone-min-height: 120px;
     width: min(320px, 100%);
     pointer-events: auto;
 }

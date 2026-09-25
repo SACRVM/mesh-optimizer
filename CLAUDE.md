@@ -43,24 +43,31 @@ Rules that keep it working on a desktop page:
 ## UI conventions
 
 Shared by the four apps that came out of DREAM TOOLS (vectorizer,
-background-remover, mesh-optimizer, svg-to-3d) — keep them in step.
+background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
 
-1. **Toolbar order:** Open (`btn`, `folder` icon, not primary) · the main
-   export (`btn primary`, `download` icon, the format as label) · further
-   formats in a `sac-menu` "More ▾" · Copy where it applies (`nav-icon-btn`)
-   · the app's own icon buttons · Credits (`copyright`) · Help (`info`).
-2. **Exports always ask** where to save — no silent overwrite of an earlier
-   file.
-3. **Credits** open `sac.about` with the manifest's `notices` — every
-   third-party licence is reachable from the UI.
-4. **The empty state is a `sac-drop-zone`**; its click / Enter goes through
-   `context.files.open`, never the device picker directly.
-5. **Settings are remembered:** controls marked `data-keep` are stored in
-   `context.fs` ("settings") and restored by replaying their kit event.
-6. **Ctrl+O / Ctrl+S** (open / main export) through `sac.hotkeys`, only
-   while the app is on screen.
-7. **No prose on the UI.** Panels, windows and empty states carry controls,
-   short labels and data readouts only; every explanation lives in the Help
+1. **Toolbar order:** Open (`btn`, icon `folder`, not primary) · main export
+   (`btn primary`, icon `download`, label = format, pinned with
+   `data-overflow="never"` — the ribbon's overflow folds buttons but never a
+   `sac-menu`, so an unpinned primary would vanish first on a phone) · further
+   formats in one `sac-menu` "More ▾" · Copy where it applies
+   (`nav-icon-btn`) · app-specific icon buttons · Credits (`copyright`) · Help
+   (`info`).
+2. **Exports always ask** (Save as…) — no silent overwrite through a kept
+   handle. Ctrl+S on an empty app does nothing.
+3. **Credits via `sac.about`** from the manifest — the `notices` in `app.json`
+   are what users see, keep them complete.
+4. **Empty state = `sac-drop-zone`** in `.app-drop`, styled by the shared
+   `.app-drop` CSS block (identical in all four `app.css`: ink and glass on
+   `--lift`, because the viewport is black in both themes; clears the label
+   row and the HUD). Its click / Enter go through `context.files.open`, not
+   the device picker.
+5. **Settings are remembered:** controls with `data-keep="key"` are saved to
+   `context.fs` ("settings") and replayed on mount through their kit event.
+   Per-document values (e.g. a threshold fitted to one image) are not kept.
+6. **Ctrl+O / Ctrl+S** (open / main export) through `sac.hotkeys`, registered
+   only while the app is on screen.
+7. **No prose on the UI.** Panels, windows and the empty state carry controls,
+   short labels and data readouts only — every explanation goes into the Help
    window.
 
 **Language:** chat in German, code/docs/commits in English.
