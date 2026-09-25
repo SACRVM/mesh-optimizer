@@ -140,7 +140,7 @@
             <sac-hud id="mesh-stats" position="bottom-left">Faces: 0 · Verts: 0 · Open: 0</sac-hud>
             <div class="mo-busy" hidden><sac-spinner label="Working" style="--spinner-size: 28px"></sac-spinner><span class="mo-busy-label"></span></div>
             <div class="app-drop mo-empty">
-                <sac-drop-zone accept=".obj,.stl,.glb,.gltf" label="Drop a mesh" hint="or click to open"
+                <sac-drop-zone class="on-viewport" accept=".obj,.stl,.glb,.gltf" label="Drop a mesh" hint="or click to open"
                                touch-label="Open a mesh" touch-hint=""></sac-drop-zone>
             </div>
         </div>

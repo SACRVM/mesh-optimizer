@@ -57,8 +57,9 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
 
 1. **Toolbar order:** Open (`btn`, icon `folder`, not primary) · main export
    (`btn primary`, icon `download`, label = format, pinned with
-   `data-overflow="never"` — the ribbon's overflow folds buttons but never a
-   `sac-menu`, so an unpinned primary would vanish first on a phone) · further
+   `data-overflow="never"` — the ribbon folds from the end, so an unpinned
+   primary goes into "…" on a phone while Open stays; still true on kit
+   2.12.0, whose `sac-menu` folding does not change that) · further
    formats in one `sac-menu` "More ▾" · Copy where it applies
    (`nav-icon-btn`) · app-specific icon buttons · Credits (`copyright`) · Help
    (`info`).
@@ -67,9 +68,10 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
 3. **Credits via `sac.about`** from the manifest — the `notices` in `app.json`
    are what users see, keep them complete.
 4. **Empty state = `sac-drop-zone`** in `.app-drop`, styled by the shared
-   `.app-drop` CSS block (identical in all four `app.css`: ink and glass on
-   `--lift`, because the viewport is black in both themes; clears the label
-   row and the HUD). Its click / Enter go through `context.files.open`, not
+   `.app-drop` CSS block (identical in all four `app.css`; the zone carries
+   the kit's `on-viewport` class, because the viewport is black in both
+   themes, plus one opaque `--glass` line — the kit's glass is translucent
+   and the scene showed through; clears the label row and the HUD). Its click / Enter go through `context.files.open`, not
    the device picker.
 5. **Settings are remembered:** controls with `data-keep="key"` are saved to
    `context.fs` ("settings") and replayed on mount through their kit event.
@@ -140,12 +142,10 @@ Repair are collapsible `sac-section`s; their folded state is kept in
 `context.fs` ("sections", via `data-fold`), outside the shared settings
 snippet.
 
-Ready now (the desktop host runs 2.12.0 too), but shared across the four
-DREAM-TOOLS-born apps — change them in all four at once:
-- `sac-menu` folding in the toolbar overflow → then the
-  `data-overflow="never"` pin on the OBJ button can go.
-- `.on-viewport` on `sac-drop-zone` → then the six token overrides in the
-  shared `.app-drop` block can go (in all four apps at once).
+The `.app-drop` block now uses `.on-viewport` plus one opaque `--glass`
+line. The OBJ button keeps its overflow pin (see convention 1). The three
+siblings were asked on 2026-09-25 to make the same change — check that
+their `.app-drop` block matches this one.
 
 Waiting on the appkit:
 - `sac-stepper` width for decimals → then positions and scale become
