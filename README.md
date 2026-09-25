@@ -28,7 +28,12 @@ npx serve .
   movable key light; live face / vertex / open-edge / sliver counts.
 - **Transforms:** rotate, move and uniformly scale objects before processing.
 - **Remembers** your view and optimization settings; Ctrl+O opens, Ctrl+S saves
-  the OBJ. Every save asks where the file goes.
+  the OBJ. Every save asks where the file goes; unsaved edits are guarded
+  before another file replaces them.
+- **Keyboard:** V / 1–4 switch modes, Del deletes, Esc deselects, F frames a
+  part, Ctrl+Z / Ctrl+Y undo and redo — `?` shows them all.
+- **Touch:** viewing and every panel work on a phone; face / edge / vertex /
+  part editing needs a mouse and is hidden there.
 
 ## Install on a desktop
 

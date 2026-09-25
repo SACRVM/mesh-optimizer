@@ -30,6 +30,7 @@
             sac.app.styles(BASE + "app.css", CSS_ID);
             this.innerHTML = `
 <sac-nav brand="MESH OPTIMIZER" brand-icon="mesh" brand-href="#/" host-nav="wide">
+    <div slot="context" class="mo-theme"><sac-theme-toggle></sac-theme-toggle></div>
     <div slot="toolbar" class="toolbar">
         <button type="button" class="btn mo-open" title="Open OBJ, STL, GLB or glTF (Ctrl+O)">
             <sac-icon name="folder"></sac-icon> Open
@@ -52,6 +53,12 @@
         </button>
         <button type="button" class="nav-icon-btn" id="toolbar-transforms" title="Transforms">
             <sac-icon name="move"></sac-icon>
+        </button>
+        <button type="button" class="nav-icon-btn mo-fit" title="Frame the model">
+            <sac-icon name="fit"></sac-icon>
+        </button>
+        <button type="button" class="nav-icon-btn mo-keys" title="Keyboard shortcuts (?)">
+            <sac-icon name="keyboard"></sac-icon>
         </button>
         <button type="button" class="nav-icon-btn mo-credits" title="Credits &amp; licences">
             <sac-icon name="copyright"></sac-icon>
@@ -93,7 +100,7 @@
                 <div id="parts-actions" class="mo-parts-actions" style="display:none;">
                     <div class="mo-parts-tiny">
                         <span>Delete under</span>
-                        <input type="number" id="parts-min-faces" value="10" min="1" step="1">
+                        <sac-stepper id="parts-min-faces" value="10" min="1" max="999" step="1" label="Minimum faces"></sac-stepper>
                         <span>faces</span>
                         <button type="button" class="btn" id="btn-delete-tiny">Go</button>
                     </div>
@@ -131,6 +138,7 @@
         <div class="viewport mo-viewport" id="canvas-container" slot="end">
             <sac-hud id="selection-info" position="top-left"></sac-hud>
             <sac-hud id="mesh-stats" position="bottom-left">Faces: 0 · Verts: 0 · Open: 0</sac-hud>
+            <div class="mo-busy" hidden><sac-spinner label="Working" style="--spinner-size: 28px"></sac-spinner><span class="mo-busy-label"></span></div>
             <div class="app-drop mo-empty">
                 <sac-drop-zone accept=".obj,.stl,.glb,.gltf" label="Drop a mesh" hint="or click to open"
                                touch-label="Open a mesh" touch-hint=""></sac-drop-zone>
@@ -149,22 +157,21 @@
     <sac-scene-graph id="scene-graph" class="mo-graph"></sac-scene-graph>
 </sac-window>
 
-<sac-window id="window-transforms" title="Transforms" width="300px" height="350px"
+<sac-window id="window-transforms" title="Transforms" width="320px" height="520px"
             left="calc(50vw - 150px)" top="100px" controls="close">
     <div class="mo-transforms">
         <label>Live alignment</label>
         <div class="mo-tgrid">
-            <div><span>Rot X</span><input type="number" id="rot-x" value="0" step="90"></div>
-            <div><span>Rot Y</span><input type="number" id="rot-y" value="0" step="90"></div>
-            <div><span>Rot Z</span><input type="number" id="rot-z" value="0" step="90"></div>
-            <div><span>Pos X</span><input type="number" id="pos-x" value="0" step="0.1"></div>
-            <div><span>Pos Y</span><input type="number" id="pos-y" value="0" step="0.1"></div>
-            <div><span>Pos Z</span><input type="number" id="pos-z" value="0" step="0.1"></div>
+            <span>Rot X</span><sac-stepper id="rot-x" value="0" min="0" max="345" step="15" unit="°" label="Rotation X"></sac-stepper>
+            <span>Rot Y</span><sac-stepper id="rot-y" value="0" min="0" max="345" step="15" unit="°" label="Rotation Y"></sac-stepper>
+            <span>Rot Z</span><sac-stepper id="rot-z" value="0" min="0" max="345" step="15" unit="°" label="Rotation Z"></sac-stepper>
+            <span>Pos X</span><input type="number" id="pos-x" value="0" step="0.01" aria-label="Position X">
+            <span>Pos Y</span><input type="number" id="pos-y" value="0" step="0.01" aria-label="Position Y">
+            <span>Pos Z</span><input type="number" id="pos-z" value="0" step="0.01" aria-label="Position Z">
         </div>
         <label>Uniform scale</label>
         <div class="mo-scale">
-            <input type="number" id="scale-uniform" value="1" step="0.1" min="0.0001"
-                   title="Uniform scale from the object's origin — equal in every direction">
+            <input type="number" id="scale-uniform" value="1" step="0.1" min="0.0001" aria-label="Uniform scale">
             <button type="button" class="btn" data-scale-mul="0.5">÷2</button>
             <button type="button" class="btn" data-scale-mul="2">×2</button>
             <button type="button" class="btn" data-scale-mul="10">×10</button>
@@ -202,15 +209,21 @@
         <p>Rotate, move and uniformly scale the active object before processing — the results
            are best on a correctly oriented, sensibly sized model. Scale works from the object's
            origin, equal in every direction; ÷2 / ×2 / ×10 fix the usual "imported 100× too
-           big" case.</p>
+           big" case. Rotation goes in 15° steps; position and scale take any number.</p>
         <h3>Editing</h3>
         <p><b>1</b> face, <b>2</b> edge, <b>3</b> vertex mode: click an element for its menu
            (collapse, delete, dissolve); drag vertices to move them. <b>V</b> returns to view mode.
            <b>Single-sided view</b> renders with backface culling, so wrongly wound faces show as
            holes — fix them with <b>Recalc normals</b>.</p>
         <h3>Navigation</h3>
-        <p>The wheel zooms towards the cursor, so you can keep diving into a detail instead of
-           stalling at the orbit centre.</p>
+        <p>Drag to orbit, right-drag to pan. The wheel zooms towards the cursor, so you can keep
+           diving into a detail instead of stalling at the orbit centre. <b>Frame the model</b>
+           (toolbar) brings everything back into view. <b>?</b> lists every shortcut.</p>
+        <p>On a touch screen the viewer and every panel work; face, edge, vertex and part editing
+           need a mouse and are hidden there.</p>
+        <h3>Unsaved work</h3>
+        <p>Edits count as unsaved until you save. Opening another file asks first, and so does
+           leaving the page.</p>
     </div>
 </sac-window>
 `;
@@ -225,6 +238,17 @@
             this._viewport = viewport;
             this.querySelector(".mo-open").addEventListener("click", () => this._open());
             this.querySelector(".mo-credits").addEventListener("click", () => this._about());
+            this.querySelector(".mo-fit").addEventListener("click", () => this._engine?.frame());
+            this.querySelector(".mo-keys").addEventListener("click", () => this._showKeys());
+            // The host brings its own theme switch; standalone the app offers one.
+            this.querySelector(".mo-theme").hidden = !!context.host;
+            this._busyEl = this.querySelector(".mo-busy");
+
+            // Face / edge / vertex / part picking is mouse-only: on a touch screen the
+            // buttons are hidden (CSS) and an active edit mode falls back to view.
+            this._coarse = matchMedia("(pointer: coarse)");
+            this._onCoarse = () => { if (this._coarse.matches && this._engine && this._engine.mode() !== "view") this._engine.setMode("view"); };
+            this._coarse.addEventListener("change", this._onCoarse);
             this._wireDropZone((file) => this._openFile(file));
 
             // Whole-viewport drop, for when a mesh is already loaded. The drop
@@ -249,7 +273,12 @@
                 this._engine = engine.start(this, {
                     isVisible: () => !!this._visible,
                     saveFile: (blob, name, accept) => this._save(blob, name, accept),
+                    notify: (message, kind = "info") => sac.toast?.(message, { kind }),
+                    busy: (label) => this._busy(label),
+                    setDirty: (on) => this._setDirty(on),
                 });
+                this._onCoarse();
+                this._syncKeys();
                 // The engine attached its listeners in start() — only now can a
                 // replayed setting reach it.
                 this._restoreSettings();
@@ -262,6 +291,8 @@
 
         onUnmount() {
             this._setVisible(false);
+            this._coarse?.removeEventListener("change", this._onCoarse);
+            this._setDirty(false);
             this._io?.disconnect();
             this._io = null;
             clearTimeout(this._keepTimer);
@@ -273,8 +304,66 @@
         _setVisible(on) {
             if (on === !!this._visible) return;
             this._visible = on;
-            if (on) this._offKeys = this._registerFileKeys(() => this.querySelector("#btn-export").click());
-            else { this._offKeys?.(); this._offKeys = null; }
+            this._syncKeys();
+        }
+
+        /** Register every key (file, tool, "?") while visible AND the engine is up; release otherwise. */
+        _syncKeys() {
+            const want = !!this._visible && !!this._engine;
+            if (want === !!this._offKeys) return;
+            if (!want) { this._offKeys(); this._offKeys = null; return; }
+            const offs = [this._registerFileKeys(() => this.querySelector("#btn-export").click())];
+            for (const k of this._engine.keyBindings()) {
+                offs.push(sac.hotkeys.register(k.combo, () => k.run(), {
+                    group: k.group, description: k.description, skipInInput: !!k.skipInInput,
+                }));
+            }
+            if (sac.shortcuts) {
+                offs.push(sac.shortcuts.bind("shift+?"));
+                offs.push(sac.shortcuts.add([
+                    { group: "View", keys: ["Drag"], description: "Orbit" },
+                    { group: "View", keys: ["Right-drag"], description: "Pan" },
+                    { group: "View", keys: ["Wheel"], description: "Zoom towards the cursor" },
+                    { group: "Edit", keys: ["Ctrl", "click"], description: "Add a part to the selection" },
+                    { group: "Edit", keys: ["Shift", "click"], description: "Select a range of parts" },
+                ]));
+            }
+            this._offKeys = () => offs.forEach((off) => off && off());
+        }
+
+        _showKeys() {
+            if (sac.shortcuts) sac.shortcuts.show({ title: "Mesh Optimizer shortcuts" });
+        }
+
+        /** Busy overlay: shown and painted (two frames) before the blocking work starts. */
+        async _busy(label) {
+            this._busyCount = (this._busyCount || 0) + 1;
+            this._busyEl.querySelector(".mo-busy-label").textContent = label;
+            this._busyEl.hidden = false;
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            return () => {
+                this._busyCount = Math.max(0, this._busyCount - 1);
+                if (!this._busyCount) this._busyEl.hidden = true;
+            };
+        }
+
+        _setDirty(on) {
+            this._dirty = !!on;
+            this._ctx?.setDirty?.(this._dirty);
+        }
+
+        /** Unsaved edits? Ask before throwing them away. → true to go on. */
+        async _discardOk() {
+            if (!this._dirty) return true;
+            const answer = await sac.dialog.confirm({
+                title: "Discard unsaved changes?",
+                message: "The edited mesh has not been saved.",
+                buttons: [
+                    { action: "cancel", label: "Cancel", kind: "default" },
+                    { action: "discard", label: "Discard", kind: "destructive" },
+                ],
+            });
+            return answer === "discard";
         }
 
         async _open() {
@@ -290,14 +379,18 @@
             }
             const engine = await this._ready;
             if (!engine) return;
+            if (!(await this._discardOk())) return;
             this._viewport.classList.add("has-mesh");
-            engine.openFile(file);
+            await engine.openFile(file);
         }
 
         async _save(blob, name, accept) {
             try {
                 const saved = await this._ctx.files.save(blob, { name, accept, title: "Save mesh" });
-                if (saved) sac.toast?.(`Saved ${saved.name}`, { kind: "success" });
+                if (saved) {
+                    this._setDirty(false);
+                    sac.toast?.(`Saved ${saved.name}`, { kind: "success" });
+                }
                 return saved;
             } catch (err) {
                 console.error("[mesh-optimizer] save failed:", err);
@@ -323,6 +416,7 @@
         async _restoreSettings() {
             let saved = null;
             try { saved = await this._ctx.fs?.read("settings", null); } catch { saved = null; }
+            if (saved && typeof saved === "object" && this._migrateSettings) saved = this._migrateSettings(saved);
             if (saved && typeof saved === "object") {
                 for (const el of this.querySelectorAll("[data-keep]")) {
                     const key = el.dataset.keep;
@@ -331,6 +425,7 @@
                     const fire = (type, value) => el.dispatchEvent(new CustomEvent(type, { detail: { value }, bubbles: true }));
                     if (el.tagName === "SAC-TOGGLE") { el.checked = !!v; fire("sac:change", !!v); }
                     else if (el.tagName === "INPUT") { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); }
+                    else if (el.tagName === "SAC-STEPPER") { el.value = Number(v); fire("sac:change", Number(v)); }
                     else if (el.tagName === "SAC-SLIDER") { el.value = String(v); fire("sac:input", String(v)); fire("sac:change", String(v)); }
                     else { el.value = String(v); fire("sac:change", String(v)); }
                 }

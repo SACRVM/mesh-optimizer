@@ -31,7 +31,7 @@ app-mesh-optimizer .mo-parts-tiny {
     font-size: 0.68rem;
     color: var(--text-muted);
 }
-app-mesh-optimizer .mo-parts-tiny input { width: 56px; padding: 4px; text-align: center; }
+app-mesh-optimizer .mo-parts-tiny { flex-wrap: wrap; }
 app-mesh-optimizer .mo-parts-tiny .btn { width: auto; margin-left: auto; padding: 4px 10px; }
 
 /* ---- viewport ---- */
@@ -90,12 +90,17 @@ app-mesh-optimizer .item-label { color: var(--text-muted); font-size: 0.75rem; }
 /* ---- transforms window ---- */
 app-mesh-optimizer .mo-transforms { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 app-mesh-optimizer .mo-transforms label { margin: 0; }
-app-mesh-optimizer .mo-tgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-app-mesh-optimizer .mo-tgrid span { display: block; font-size: 0.62rem; color: var(--text-muted); margin-bottom: 2px; }
-app-mesh-optimizer .mo-tgrid input,
-app-mesh-optimizer .mo-scale input { padding: 4px 6px; }
-app-mesh-optimizer .mo-scale { display: flex; align-items: center; gap: 6px; }
-app-mesh-optimizer .mo-scale input { flex: 1; min-width: 0; }
+/* label | stepper rows */
+app-mesh-optimizer .mo-tgrid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 6px 10px;
+}
+app-mesh-optimizer .mo-tgrid > span { font-size: 0.68rem; color: var(--text-muted); }
+app-mesh-optimizer .mo-scale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+app-mesh-optimizer .mo-tgrid input, app-mesh-optimizer .mo-scale input { padding: 4px 6px; }
+app-mesh-optimizer .mo-scale input { flex: 1 1 100%; }
 app-mesh-optimizer .mo-scale .btn { width: auto; padding: 4px 8px; }
 
 app-mesh-optimizer .mo-help { padding: 16px; font-size: 0.85rem; line-height: 1.6; }
@@ -146,3 +151,27 @@ app-mesh-optimizer .btn-cancel {
     cursor: pointer;
 }
 app-mesh-optimizer .btn-cancel:hover { color: var(--text); }
+
+/* ---- busy overlay (simplify, file load) ---- */
+app-mesh-optimizer .mo-busy[hidden] { display: none; }
+app-mesh-optimizer .mo-busy {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: color-mix(in srgb, var(--viewport-bg) 60%, transparent);
+    backdrop-filter: blur(3px);
+    color: var(--lift);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+/* ---- touch: face / edge / vertex / part picking needs a mouse ---- */
+@media (pointer: coarse) {
+    app-mesh-optimizer .mo-modes button:not([data-value="view"]) { display: none; }
+}

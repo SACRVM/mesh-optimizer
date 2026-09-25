@@ -31,6 +31,16 @@ Rules that keep it working on a desktop page:
   import to `/npm/three@0.170.0/+esm`, which is the same module as the main
   import — one Three instance. Mixing in a plain `three.module.js` URL gives
   two instances and breaks `instanceof`.
+- **Engine ↔ app hooks.** `start(root, host)` takes `isVisible`, `saveFile`,
+  `notify(message, kind)` (→ `sac.toast`; every user-relevant result goes
+  through it, the console is for debugging only), `busy(label)` (resolves once
+  the overlay has painted, returns `done()`) and `setDirty(bool)` (every
+  `pushState()` marks dirty, a load clears it, app.js clears it after a save).
+  The engine's keys are data (`keyBindings()`); app.js registers them with
+  `sac.hotkeys` while the app is on screen — never a raw `keydown` listener.
+- **`sac-stepper` has a fixed 3-character value field**, so it is used only
+  for short integers (rotation 0–345° in 15° steps, the parts threshold up to
+  999). Decimals (position, scale) stay plain number inputs.
 - **Keys and rendering only while on screen** (`IS_VISIBLE()`, fed by an
   IntersectionObserver): the render loop idles and the keydown handler returns
   while the view is hidden.

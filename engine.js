@@ -10,6 +10,10 @@
 let ROOT = document;
 let IS_VISIBLE = () => true;
 let saveFile = async () => null;
+// Host hooks, set by start(): user-facing messages, a busy overlay, the dirty flag.
+let notify = () => {};                       // (message, kind) — kind: info | success | warn | error
+let busy = async () => () => {};             // (label) → resolves once painted, returns done()
+let markDirty = () => {};                    // (bool)
 const $id = (id) => ROOT.querySelector('#' + CSS.escape(id));
 
 /**
@@ -1995,6 +1999,7 @@ class MeshPrepApp {
 
     /** Save current state before a destructive action */
     pushState() {
+        markDirty(true);
         this.undoStack.push(this.captureSnapshot());
         this.redoStack = [];
         if (this.undoStack.length > 30) this.undoStack.shift();
@@ -2267,6 +2272,7 @@ class MeshPrepApp {
 
         if (meshes.length === 0) {
             console.error("[MeshPrep] No meshes found in file.");
+            notify("No meshes found in that file.", "error");
             return;
         }
 
@@ -2317,18 +2323,26 @@ class MeshPrepApp {
             let msg = `[MeshPrep] Auto-repair: ${rep.totalFlips} face(s) flipped across ${rep.count} object(s).`;
             if (rep.nonManifold > 0) msg += ` ${rep.nonManifold} non-manifold edge(s) remain (doubled/overlapping geometry) — clean the source if holes persist.`;
             console.log(msg);
+            if (rep.nonManifold > 0) notify(`${rep.nonManifold} non-manifold edge(s) — doubled or overlapping geometry in the source.`, "warn");
+            else notify(`Winding repaired: ${rep.totalFlips} face(s) flipped.`, "info");
         }
+        markDirty(false);   // a freshly loaded file is not unsaved work
 
         this.updateMeshDisplay();
         this.updateStats();
         this.refreshSceneUI();
         this.syncTransformUI();
 
-        // Centralize camera
+        this.frameAll();
+    }
+
+    /** Frame every visible object: camera, clipping planes, shadow camera. */
+    frameAll() {
         const bbox = new THREE.Box3();
         this.objects.forEach(obj => {
             if (obj.displayMesh) bbox.expandByObject(obj.displayMesh);
         });
+        if (bbox.isEmpty()) return;
         const center = bbox.getCenter(new THREE.Vector3());
         const size = bbox.getSize(new THREE.Vector3());
 
@@ -2573,55 +2587,6 @@ class MeshPrepApp {
             this.container.addEventListener('click', (e) => this.onMouseClick(e));
         }
 
-        window.addEventListener('keydown', (e) => {
-            if (!IS_VISIBLE()) return; // a hidden view on a desktop must not answer another app's keys
-            // Never hijack typing: without this, "v" in a rotation field switched to View Mode and
-            // DEL in the part-threshold field deleted geometry. composedPath()[0] sees through the
-            // shadow DOM of the kit components.
-            const target = (e.composedPath && e.composedPath()[0]) || e.target;
-            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-
-            if (e.ctrlKey && e.key.toLowerCase() === 'z') {
-                if (e.shiftKey) this.redo();
-                else this.undo();
-            }
-            if (e.ctrlKey && e.key.toLowerCase() === 'y') {
-                this.redo();
-            }
-            if (e.key.toLowerCase() === 'v') this.setSelectMode('view');
-            if (e.key === '1') this.setSelectMode('face');
-            if (e.key === '2') this.setSelectMode('edge');
-            if (e.key === '3') this.setSelectMode('vertex');
-            if (e.key === '4') this.setSelectMode('part');
-            if (e.key === 'Escape') this.clearSelection(); // global deselect
-            if (e.key.toLowerCase() === 'f' && this.selection.part) this.focusPart(this.selection.part);
-
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                // Parts win whenever any are selected — they're visibly highlighted, so there's
-                // no ambiguity about what DEL is about to remove.
-                if (this.selectedParts.size) { this.deleteSelectedParts(); return; }
-                if (this.selection.mode === 'edge') this.collapseSelectedEdge('CENTER');
-                if (this.selection.mode === 'face' && this.selection.face) {
-                    const face = this.selection.face;
-                    const fh = face.halfEdge;
-                    const fp1 = fh.prev.vertex.position;
-                    const fp2 = fh.vertex.position;
-                    const fp3 = fh.next.vertex.position;
-                    const fa1 = this.calculateAngle(fp2, fp1, fp3);
-                    const fa2 = this.calculateAngle(fp1, fp2, fp3);
-                    const fa3 = this.calculateAngle(fp1, fp3, fp2);
-                    const fmin = Math.min(fa1, fa2, fa3);
-                    if (fmin < 15) {
-                        if (fa1 <= fa2 && fa1 <= fa3) this.collapseSelectedFace('V1');
-                        else if (fa2 <= fa1 && fa2 <= fa3) this.collapseSelectedFace('V2');
-                        else this.collapseSelectedFace('V3');
-                    } else {
-                        this.collapseSelectedFace('CENTER');
-                    }
-                }
-            }
-        });
-
         safeListen('view-wire', 'sac:change', () => this.updateMeshDisplay());
         safeListen('view-quality', 'sac:change', () => this.updateMeshDisplay());
         safeListen('view-shading', 'sac:change', () => this.updateShading());
@@ -2683,8 +2648,12 @@ class MeshPrepApp {
         safeListen('btn-merge-all', 'click', () => { this.mergeAllObjects(); });
 
         safeListen('btn-qem-mesh', 'click', async () => {
-            this.bakeTransforms();
-            await this.qemSimplify();
+            if (!this.activeObject) { notify('Open a mesh first.', 'warn'); return; }
+            const done = await busy('Simplifying…');
+            try {
+                this.bakeTransforms();
+                await this.qemSimplify();
+            } finally { done(); }
         });
 
         // Engine selector: swap the hint and show the Density Balance slider only for QEM.
@@ -2707,13 +2676,14 @@ class MeshPrepApp {
         // --- Loose Parts (connected mesh groups) ---
         safeListen('btn-analyse-parts', 'click', () => {
             const obj = this.activeObject;
-            if (!obj) { console.warn('[MeshPrep] No mesh loaded.'); return; }
+            if (!obj) { notify('Open a mesh first.', 'warn'); return; }
             const t0 = performance.now();
             obj._partsDirty = true;
             const parts = this.getParts(obj, { force: true });
             this.expandedObjects.add(obj.id);
             this.refreshSceneUI();
             this.updateStats(); // the HUD only shows "Parts: N" once they're actually known
+            notify(parts.length > 1 ? `${parts.length} connected parts found.` : 'One connected part — nothing loose.', 'info');
             console.log(`[MeshPrep] "${obj.name}": ${parts.length} connected part(s) — largest ${parts[0]?.faceCount.toLocaleString() ?? 0} faces, smallest ${parts[parts.length - 1]?.faceCount.toLocaleString() ?? 0} (${(performance.now() - t0).toFixed(0)} ms).`);
         });
         safeListen('btn-split-parts', 'click', () => this.splitPartsToObjects());
@@ -2736,9 +2706,11 @@ class MeshPrepApp {
                 this.updateStats();
                 this.refreshSceneUI();
                 console.log(`[MeshPrep] Fill Holes: ${before} → ${after} open edges.`);
+                notify(after ? `Holes filled: ${before} → ${after} open edges.` : `Holes filled: ${before} open edges closed.`, 'success');
             } else {
                 this.undoStack.pop(); // Nothing changed
                 console.log(`[MeshPrep] Fill Holes: No holes found.`);
+                notify('No holes found.', 'info');
             }
         });
 
@@ -2756,21 +2728,32 @@ class MeshPrepApp {
             if (r.nonManifold > 0) msg += ` ⚠ ${r.nonManifold} non-manifold edge(s) (shared by >2 faces — doubled/overlapping geometry) couldn't be fully resolved; clean the source (Remove Duplicates) or simplify.`;
             if (r.openShell > 0) msg += ` ${r.openShell} open shell(s): "outward" undefined, orientation left as-is.`;
             console.log(msg);
-            if (!this.inGameView) console.log('[MeshPrep] Tip: toggle "Single-sided view" to verify the result the way a backface-culling engine renders it.');
+            notify(`Normals recalculated: ${r.totalFlips} face(s) flipped.`, 'success');
+            if (r.nonManifold > 0) notify(`${r.nonManifold} non-manifold edge(s) could not be resolved — doubled or overlapping geometry.`, 'warn');
+            if (r.openShell > 0) notify(`${r.openShell} open shell(s) left as they are — they have no outside.`, 'warn');
         });
 
         // Transforms UI
         const transformInputs = ['rot-x', 'rot-y', 'rot-z', 'pos-x', 'pos-y', 'pos-z', 'scale-uniform'];
+        // One undo step per burst of stepper changes (a held ± repeats every 60 ms).
+        // Rotation fields are sac-steppers (sac:change), position and scale plain number inputs.
+        const onTransform = () => {
+            if (!this.activeObject) return;
+            if (!this._transformBurst) this.pushState();
+            clearTimeout(this._transformBurst);
+            this._transformBurst = setTimeout(() => { this._transformBurst = null; }, 800);
+            this.updateTransforms();
+        };
         transformInputs.forEach(id => {
-            safeListen(id, 'focus', () => this.pushState());
-            safeListen(id, 'input', () => this.updateTransforms());
+            safeListen(id, 'sac:change', onTransform);
+            safeListen(id, 'input', onTransform);
         });
 
         safeListen('btn-reset-transforms', 'click', () => {
             this.pushState();
             transformInputs.forEach(id => {
                 const el = $id(id);
-                if (el) el.value = (id === 'scale-uniform') ? 1 : 0;
+                if (el) el.value = (id === 'scale-uniform') ? 1 : 0;   // stepper: programmatic set, silent
             });
             this.updateTransforms();
         });
@@ -2782,7 +2765,7 @@ class MeshPrepApp {
                 if (!el || !this.activeObject) return;
                 this.pushState();
                 const cur = parseFloat(el.value) || 1;
-                el.value = +(cur * parseFloat(btn.dataset.scaleMul)).toPrecision(6);
+                el.value = +(cur * parseFloat(btn.dataset.scaleMul)).toPrecision(6);   // clamped by the stepper
                 this.updateTransforms();
             });
         });
@@ -2790,6 +2773,51 @@ class MeshPrepApp {
 
     get activeObject() {
         return this.objects.get(this.activeObjectId);
+    }
+
+    /**
+     * The tool's keys, for sac.hotkeys (app.js registers them while the app is on screen).
+     * sac.hotkeys ignores plain keys while typing; the mod combos skip inputs explicitly,
+     * so a text field keeps its own undo.
+     */
+    keyBindings() {
+        const mode = (m) => () => this.setSelectMode(m);
+        return [
+            { combo: 'v', group: 'Mode', description: 'View mode', run: mode('view') },
+            { combo: '1', group: 'Mode', description: 'Face mode', run: mode('face') },
+            { combo: '2', group: 'Mode', description: 'Edge mode', run: mode('edge') },
+            { combo: '3', group: 'Mode', description: 'Vertex mode', run: mode('vertex') },
+            { combo: '4', group: 'Mode', description: 'Part mode', run: mode('part') },
+            { combo: 'mod+z', group: 'Edit', description: 'Undo', run: () => this.undo(), skipInInput: true },
+            { combo: 'mod+y', group: 'Edit', description: 'Redo', run: () => this.redo(), skipInInput: true },
+            { combo: 'mod+shift+z', group: 'Edit', description: 'Redo', run: () => this.redo(), skipInInput: true },
+            { combo: 'delete', group: 'Edit', description: 'Delete / collapse the selection', run: () => this.deleteKey() },
+            { combo: 'backspace', group: 'Edit', description: 'Delete / collapse the selection', run: () => this.deleteKey() },
+            { combo: 'escape', group: 'Edit', description: 'Deselect', run: () => this.clearSelection() },
+            { combo: 'f', group: 'View', description: 'Frame the selected part', run: () => { if (this.selection.part) this.focusPart(this.selection.part); } },
+        ];
+    }
+
+    /** Del / Backspace: parts win when selected; else collapse the selected edge or face. */
+    deleteKey() {
+        if (this.selectedParts.size) { this.deleteSelectedParts(); return; }
+        if (this.selection.mode === 'edge') this.collapseSelectedEdge('CENTER');
+        if (this.selection.mode === 'face' && this.selection.face) {
+            const fh = this.selection.face.halfEdge;
+            const fp1 = fh.prev.vertex.position;
+            const fp2 = fh.vertex.position;
+            const fp3 = fh.next.vertex.position;
+            const fa1 = this.calculateAngle(fp2, fp1, fp3);
+            const fa2 = this.calculateAngle(fp1, fp2, fp3);
+            const fa3 = this.calculateAngle(fp1, fp3, fp2);
+            if (Math.min(fa1, fa2, fa3) < 15) {
+                if (fa1 <= fa2 && fa1 <= fa3) this.collapseSelectedFace('V1');
+                else if (fa2 <= fa1 && fa2 <= fa3) this.collapseSelectedFace('V2');
+                else this.collapseSelectedFace('V3');
+            } else {
+                this.collapseSelectedFace('CENTER');
+            }
+        }
     }
 
     // The scene-graph rows report their HTML id, which is ALWAYS a string ("0"), while
@@ -3004,14 +3032,16 @@ class MeshPrepApp {
         const obj = this.activeObject;
         if (!obj) return;
 
-        $id('rot-x').value = Math.round(THREE.MathUtils.radToDeg(obj.transforms.rotation.x));
-        $id('rot-y').value = Math.round(THREE.MathUtils.radToDeg(obj.transforms.rotation.y));
-        $id('rot-z').value = Math.round(THREE.MathUtils.radToDeg(obj.transforms.rotation.z));
-        $id('pos-x').value = obj.transforms.position.x.toFixed(2);
-        $id('pos-y').value = obj.transforms.position.y.toFixed(2);
-        $id('pos-z').value = obj.transforms.position.z.toFixed(2);
+        // Rotation steppers show 0–345°; a programmatic set is silent (no undo step).
+        const deg = (r) => ((Math.round(THREE.MathUtils.radToDeg(r)) % 360) + 360) % 360;
+        $id('rot-x').value = deg(obj.transforms.rotation.x);
+        $id('rot-y').value = deg(obj.transforms.rotation.y);
+        $id('rot-z').value = deg(obj.transforms.rotation.z);
+        $id('pos-x').value = +obj.transforms.position.x.toFixed(2);
+        $id('pos-y').value = +obj.transforms.position.y.toFixed(2);
+        $id('pos-z').value = +obj.transforms.position.z.toFixed(2);
         const scaleEl = $id('scale-uniform');
-        if (scaleEl) scaleEl.value = (obj.transforms.scale ?? 1).toFixed(3).replace(/\.?0+$/, '');
+        if (scaleEl) scaleEl.value = +(obj.transforms.scale ?? 1).toFixed(4);
         this.updateScaleReadout();
     }
 
@@ -3105,6 +3135,7 @@ class MeshPrepApp {
             }
         } catch (err) {
             console.error('[MeshPrep] Simplify failed:', err);
+            notify(`Simplify failed: ${err.message || err}`, 'error');
             this.undoStack.pop();
             return;
         }
@@ -3116,8 +3147,11 @@ class MeshPrepApp {
             this.updateStats();
             this.refreshSceneUI();
             console.log(`[MeshPrep] Simplify complete (${engine}). Removed ${collapsed}.`);
+            const now = obj.mesh.faces.filter(f => !f.isDeleted).length;
+            notify(`Simplified: ${currentFaceCount.toLocaleString()} → ${now.toLocaleString()} faces.`, 'success');
         } else {
             this.undoStack.pop();
+            notify('Nothing left to simplify at this reduction.', 'info');
         }
     }
 
@@ -3126,7 +3160,7 @@ class MeshPrepApp {
     // result stays solid. Do this before simplifying so QEM works on one connected shell.
     mergeAllObjects() {
         const vis = [...this.objects.values()].filter(o => o.visible);
-        if (vis.length < 2) { console.log('[MeshPrep] Merge: need 2+ visible objects.'); return false; }
+        if (vis.length < 2) { notify('Merge needs two or more visible objects.', 'info'); return false; }
         this.pushState();
         // Bake EVERY visible object's transform (not just the active one — bakeTransforms() only
         // touches the active object, so rotated/offset parts used to fuse at the wrong place).
@@ -3166,7 +3200,7 @@ class MeshPrepApp {
         });
         if (!parts.length) { this.undoStack.pop(); return false; }
         const merged = BufferGeometryUtils.mergeGeometries(parts, false);
-        if (!merged) { this.undoStack.pop(); console.log('[MeshPrep] Merge failed (incompatible geometry).'); return false; }
+        if (!merged) { this.undoStack.pop(); notify('Merge failed — incompatible geometry.', 'error'); return false; }
 
         this.objects.forEach(o => { if (o.displayMesh) this.scene.remove(o.displayMesh); });
         this.objects.clear();
@@ -3185,6 +3219,7 @@ class MeshPrepApp {
         if (this.syncTransformUI) this.syncTransformUI();
         const after = obj.mesh.faces.filter(f => !f.isDeleted).length;
         console.log(`[MeshPrep] Baked ${vis.length} objects → 1 mesh (${totalFaces} → ${after} faces after welding).`);
+        notify(`Merged ${vis.length} objects into one mesh.`, 'success');
         return true;
     }
 
@@ -3391,7 +3426,7 @@ class MeshPrepApp {
         const doomed = [...this.selectedParts].map(k => all.find(p => p.key === k)).filter(Boolean);
         if (!doomed.length) return;
         if (doomed.length >= all.length) {
-            console.warn('[MeshPrep] That would delete every part of the mesh — remove the object in the Scene Graph instead.');
+            notify('That would delete every part — remove the object in the scene graph instead.', 'warn');
             return;
         }
 
@@ -3399,6 +3434,7 @@ class MeshPrepApp {
         const res = obj.mesh.deleteParts(doomed);
         doomed.forEach(p => obj.hiddenParts.delete(p.key));
         console.log(`[MeshPrep] Deleted ${doomed.length} connected part(s): −${res.faces} faces, −${res.vertices} verts.`);
+        notify(`Deleted ${doomed.length} part${doomed.length === 1 ? '' : 's'} (${res.faces.toLocaleString()} faces).`, 'success');
 
         this.floatingMenu.hide();
         this.markPartsDirty(obj);
@@ -3413,8 +3449,8 @@ class MeshPrepApp {
         if (!obj) return;
         const parts = this.getParts(obj, { force: true });
         const doomed = parts.filter(p => p.faceCount < minFaces);
-        if (!doomed.length) { console.log(`[MeshPrep] No connected part under ${minFaces} faces.`); return; }
-        if (doomed.length >= parts.length) { console.warn(`[MeshPrep] Every part is under ${minFaces} faces — nothing would be left.`); return; }
+        if (!doomed.length) { notify(`No part under ${minFaces} faces.`, 'info'); return; }
+        if (doomed.length >= parts.length) { notify(`Every part is under ${minFaces} faces — nothing would be left.`, 'warn'); return; }
         this.selectedParts = new Set(doomed.map(p => p.key));
         this.deleteSelectedParts();
     }
@@ -3423,7 +3459,7 @@ class MeshPrepApp {
         const obj = this.activeObject;
         if (!obj) return;
         const parts = this.getParts(obj, { force: true });
-        if (parts.length < 2) { console.log('[MeshPrep] Mesh is a single connected part.'); return; }
+        if (parts.length < 2) { notify('The mesh is a single connected part.', 'info'); return; }
         this.selectedParts = new Set(parts.slice(1).map(p => p.key)); // sorted biggest-first
         this.deleteSelectedParts();
     }
@@ -3433,16 +3469,25 @@ class MeshPrepApp {
      * object becomes its own object (the source is consumed); with a list, only those are split
      * off and the rest stays behind.
      */
-    splitPartsToObjects(parts = null) {
+    async splitPartsToObjects(parts = null) {
         const src = this.activeObject;
         if (!src) return;
         const all = this.getParts(src, { force: true });
-        if (all.length < 2) { console.log('[MeshPrep] Split: mesh is a single connected part.'); return; }
+        if (all.length < 2) { notify('The mesh is a single connected part.', 'info'); return; }
 
         const splitAll = !parts || !parts.length;
         const list = splitAll ? all : parts;
-        if (splitAll && all.length > 60 &&
-            !confirm(`Split "${src.name}" into ${all.length} separate objects?`)) return;
+        if (splitAll && all.length > 60) {
+            const answer = await sac.dialog.confirm({
+                title: `Split into ${all.length} objects?`,
+                message: `"${src.name}" becomes ${all.length} separate objects.`,
+                buttons: [
+                    { action: 'cancel', label: 'Cancel', kind: 'default' },
+                    { action: 'split', label: 'Split', kind: 'primary' },
+                ],
+            });
+            if (answer !== 'split') return;
+        }
 
         this.pushState();
         // Split-off parts inherit the source's colours (they ARE that object's geometry);
@@ -3478,6 +3523,7 @@ class MeshPrepApp {
         this.refreshSceneUI();
         this.syncTransformUI();
         console.log(`[MeshPrep] Split ${created.length} connected part(s) into separate objects.`);
+        notify(`Split into ${created.length} objects.`, 'success');
     }
 
     /** Sidebar summary + bulk action availability. */
@@ -3635,7 +3681,7 @@ class MeshPrepApp {
         });
 
         if (exportGroup.children.length === 0) {
-            console.warn("[MeshPrep] Nothing to export.");
+            notify('Nothing to export.', 'warn');
             return;
         }
 
@@ -3658,11 +3704,13 @@ class MeshPrepApp {
                 },
                 (error) => {
                     console.error("[MeshPrep] GLTF Export failed: ", error);
+                    notify('glTF export failed.', 'error');
                 }
                 // Removed { binary: true } to strictly output standard JSON .gltf
             );
         } catch (err) {
             console.error("[MeshPrep] Failed to load GLTFExporter: ", err);
+            notify('glTF export failed — the exporter did not load.', 'error');
         }
     }
 
@@ -3687,6 +3735,7 @@ class MeshPrepApp {
             if (lastGeo) {
                 this.loadGeometry(lastGeo, false);
                 console.warn("[MeshPrep] Face collapse aborted: Topological safety violation.");
+                notify('Collapse refused — it would break the mesh topology.', 'warn');
             }
             this.updateUndoRedoUI();
         }
@@ -3716,6 +3765,7 @@ class MeshPrepApp {
             if (lastGeo) {
                 this.loadGeometry(lastGeo, false);
                 console.warn("[MeshPrep] Edge collapse aborted: Topological safety violation.");
+                notify('Collapse refused — it would break the mesh topology.', 'warn');
             }
             this.updateUndoRedoUI();
         }
@@ -4166,6 +4216,7 @@ class MeshPrepApp {
             this.refreshSceneUI();
         } else {
             console.warn("[MeshPrep] Dissolve failed (Boundary or complex valence).");
+            notify('This vertex cannot be dissolved (boundary or complex valence).', 'warn');
             this.undo();
         }
     }
@@ -4442,37 +4493,29 @@ class MeshPrepApp {
         if (!file) return;
 
         console.log(`[MeshPrep] Loading file: ${file.name} `);
-        this.originalFileName = file.name;
         const extension = file.name.split('.').pop().toLowerCase();
-        const reader = new FileReader();
-
-        reader.onload = async (event) => {
-            const contents = event.target.result;
-            let geometry = null;
-
-            try {
-                if (extension === 'obj') {
-                    const loader = new OBJLoader();
-                    const group = loader.parse(contents);
-                    this.loadGeometry(null, group);
-                } else if (extension === 'stl') {
-                    const loader = new STLLoader();
-                    const geometry = loader.parse(contents);
-                    this.loadGeometry(geometry);
-                } else if (extension === 'glb' || extension === 'gltf') {
-                    const loader = new GLTFLoader();
-                    const gltf = await new Promise((resolve, reject) => {
-                        loader.parse(contents, '', resolve, reject);
-                    });
-                    this.loadGeometry(null, gltf.scene);
-                }
-            } catch (err) {
-                console.error("[MeshPrep] Failed to parse file:", err);
+        const done = await busy('Loading…');
+        try {
+            if (extension === 'obj') {
+                const group = new OBJLoader().parse(await file.text());
+                this.originalFileName = file.name;
+                await this.loadGeometry(null, group);
+            } else if (extension === 'stl') {
+                const geometry = new STLLoader().parse(await file.arrayBuffer());
+                this.originalFileName = file.name;
+                await this.loadGeometry(geometry);
+            } else if (extension === 'glb' || extension === 'gltf') {
+                const contents = await file.arrayBuffer();
+                const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(contents, '', resolve, reject));
+                this.originalFileName = file.name;
+                await this.loadGeometry(null, gltf.scene);
             }
-        };
-
-        if (extension === 'obj') reader.readAsText(file);
-        else reader.readAsArrayBuffer(file);
+        } catch (err) {
+            console.error("[MeshPrep] Failed to parse file:", err);
+            notify(`Could not read ${file.name}.`, 'error');
+        } finally {
+            done();
+        }
     }
 
     mergeGroupGeometry(group) {
@@ -4519,10 +4562,17 @@ export function start(root, host) {
     ROOT = root;
     IS_VISIBLE = host.isVisible;
     saveFile = host.saveFile;
+    notify = host.notify || notify;
+    busy = host.busy || busy;
+    markDirty = host.setDirty || markDirty;
     const app = new MeshPrepApp();
     return {
         app,
         openFile: (file) => app.handleFile({ target: { files: [file] } }),
+        keyBindings: () => app.keyBindings(),
+        frame: () => app.frameAll(),
+        setMode: (m) => app.setSelectMode(m),
+        mode: () => app.selection.mode,
         dispose() {
             app._disposed = true;
             cancelAnimationFrame(app._raf);
