@@ -39,7 +39,7 @@
         </button>
         <sac-menu class="mo-formats">
             <button slot="trigger" type="button" class="btn" title="More formats">More <sac-icon name="chevron-down"></sac-icon></button>
-            <button type="button" data-action="gltf" id="btn-export-gltf">glTF</button>
+            <button type="button" data-action="gltf" id="btn-export-gltf"><sac-icon name="download"></sac-icon> Save as glTF</button>
         </sac-menu>
         <button type="button" class="nav-icon-btn" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
             <sac-icon name="undo"></sac-icon>
@@ -77,7 +77,7 @@
                 </sac-segmented-control>
             </sac-section>
 
-            <sac-section title="View">
+            <sac-section title="View settings">
                 <sac-toggle id="view-wire" data-keep="wire" label="Wireframe" checked></sac-toggle>
                 <sac-toggle id="view-quality" data-keep="quality" label="Quality overlay"></sac-toggle>
                 <sac-toggle id="view-shading" data-keep="shading" label="High quality shading" checked></sac-toggle>
