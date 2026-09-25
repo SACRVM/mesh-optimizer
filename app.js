@@ -84,7 +84,7 @@
                 </sac-segmented-control>
             </sac-section>
 
-            <sac-section title="View settings">
+            <sac-section title="View settings" collapsible collapsed data-fold="view">
                 <sac-toggle id="view-wire" data-keep="wire" label="Wireframe" checked></sac-toggle>
                 <sac-toggle id="view-quality" data-keep="quality" label="Quality overlay"></sac-toggle>
                 <sac-toggle id="view-shading" data-keep="shading" label="High quality shading" checked></sac-toggle>
@@ -94,7 +94,7 @@
                 <sac-slider id="light-angle-slider" data-keep="lightAngle" label="Light angle" min="0" max="360" step="5" value="45" suffix="°"></sac-slider>
             </sac-section>
 
-            <sac-section title="Loose parts">
+            <sac-section title="Loose parts" collapsible data-fold="parts">
                 <button type="button" class="btn" id="btn-analyse-parts">Analyse connected parts</button>
                 <div id="parts-summary" class="mo-parts-summary">No mesh loaded.</div>
                 <div id="parts-actions" class="mo-parts-actions" style="display:none;">
@@ -128,7 +128,7 @@
                 <button type="button" class="btn primary" id="btn-qem-mesh">Slim mesh</button>
             </sac-section>
 
-            <sac-section title="Repair">
+            <sac-section title="Repair" collapsible data-fold="repair">
                 <button type="button" class="btn" id="btn-fill-holes">Fill holes</button>
                 <button type="button" class="btn" id="btn-recalc-normals"
                         title="Unify face winding so all normals point outward">Recalc normals</button>
@@ -269,6 +269,8 @@
             });
             this._io.observe(this);
 
+            this._restoreFolds();
+
             this._ready = import(BASE + "engine.js").then((engine) => {
                 this._engine = engine.start(this, {
                     isVisible: () => !!this._visible,
@@ -396,6 +398,29 @@
                 console.error("[mesh-optimizer] save failed:", err);
                 sac.toast?.("Saving failed.", { kind: "error" });
                 return null;
+            }
+        }
+
+        /* Folded sidebar sections (data-fold="key") are remembered in
+         * context.fs ("sections"), next to the settings but outside the
+         * shared settings snippet. An older host kit ignores `collapsible`
+         * and `collapsed`, so the sections just stay open there. */
+        async _restoreFolds() {
+            const sections = [...this.querySelectorAll("sac-section[data-fold]")];
+            let saved = null;
+            try { saved = await this._ctx.fs?.read("sections", null); } catch { saved = null; }
+            if (saved && typeof saved === "object") {
+                for (const el of sections) {
+                    const key = el.dataset.fold;
+                    if (key in saved) el.toggleAttribute("collapsed", !!saved[key]);
+                }
+            }
+            for (const el of sections) {
+                el.addEventListener("sac:toggle", () => {
+                    const out = {};
+                    for (const s of sections) out[s.dataset.fold] = s.hasAttribute("collapsed");
+                    Promise.resolve(this._ctx.fs?.write("sections", out)).catch(() => {});
+                });
             }
         }
 

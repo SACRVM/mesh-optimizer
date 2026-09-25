@@ -135,13 +135,19 @@ Shared by the four apps that came out of DREAM TOOLS — keep identical.
 
 ## Open items
 
-Waiting on the appkit (reported 2026-09-25 — pick up when a release ships it,
-then re-vendor):
-- Collapsible `sac-section` → **owner asked for this**: make "View settings"
-  collapsible (probably also Loose parts / Repair). Do not build a local
-  `<details>` — wait for the kit.
+Kit 2.12.0 is vendored. View settings (folded by default), Loose parts and
+Repair are collapsible `sac-section`s; their folded state is kept in
+`context.fs` ("sections", via `data-fold`), outside the shared settings
+snippet.
+
+Waiting on the **desktop host** to re-vendor 2.12.0 (hosted, the app runs on
+the host's kit, so these would break there before it does):
 - `sac-menu` folding in the toolbar overflow → then the
   `data-overflow="never"` pin on the OBJ button can go.
+- `.on-viewport` on `sac-drop-zone` → then the six token overrides in the
+  shared `.app-drop` block can go (in all four apps at once).
+
+Waiting on the appkit:
 - `sac-stepper` width for decimals → then positions and scale become
   steppers too.
 
