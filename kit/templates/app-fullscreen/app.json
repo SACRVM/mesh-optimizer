@@ -1,0 +1,10 @@
+{
+    "id": "my-fullscreen-app",
+    "name": "My Fullscreen App",
+    "icon": "shapes",
+    "description": "One sentence about what it does — a desktop shows this on the tile.",
+    "kind": "view",
+    "tag": "app-my-fullscreen-app",
+    "entry": "app.js",
+    "version": "1.0.0"
+}

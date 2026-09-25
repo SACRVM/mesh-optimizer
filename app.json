@@ -1,0 +1,21 @@
+{
+    "id": "mesh-optimizer",
+    "name": "Mesh Optimizer",
+    "icon": "mesh",
+    "accent": "#3b82f6",
+    "description": "Clean up and slim down 3D meshes in the browser — simplify, remove loose parts, fill holes, fix normals; OBJ, STL, GLB in, OBJ or glTF out.",
+    "kind": "view",
+    "tag": "app-mesh-optimizer",
+    "entry": "app.js",
+    "version": "1.0.0",
+    "notices": [
+        {
+            "title": "Three.js",
+            "text": "three.js 0.170.0 — MIT licence, © 2010–2024 three.js authors. Loaded from jsDelivr."
+        },
+        {
+            "title": "meshoptimizer",
+            "text": "meshoptimizer 1.1.1 (simplifier, WASM) — MIT licence, © Arseny Kapoulkine. Loaded from jsDelivr on first use of the Quality engine."
+        }
+    ]
+}

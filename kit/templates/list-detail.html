@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover: the page runs under a phone's notch and home bar;
+         the kit pads its nav, layouts and scroll regions by the safe-area
+         insets, so nothing important ends up behind them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Browser chrome colour (a phone's status bar / tab strip). These two
+         values mirror the --bg seeds in kit/css/ui.css (dark / light) — the
+         one place a seed is repeated, because a meta tag cannot read a custom
+         property. A custom theme updates them together with its seeds. -->
+    <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+    <title>My List</title>
+    <!-- Adjust the path to wherever kit/ lives relative to this page. -->
+    <link rel="stylesheet" href="../kit/css/ui.css">
+
+    <script defer src="../kit/js/lib/globals.js"></script>
+    <script defer src="../kit/js/lib/icons.js"></script>
+    <script defer src="../kit/js/lib/hotkeys.js"></script>
+    <script defer src="../kit/js/components/sac-icon.js"></script>
+    <script defer src="../kit/js/components/sac-nav.js"></script>
+    <script defer src="../kit/js/components/sac-menu.js"></script>   <!-- the nav's "…" toolbar overflow -->
+    <script defer src="../kit/js/components/sac-split.js"></script>
+    <script defer src="../kit/js/components/sac-avatar.js"></script>
+    <script defer src="../kit/js/components/sac-chip.js"></script>
+    <script defer src="../kit/js/components/sac-toast.js"></script>
+    <script defer src="../kit/js/components/sac-theme-toggle.js"></script>
+    <script defer src="../kit/js/components/sac-command-palette.js"></script>
+
+    <style>
+        /* Page-local recipe — tokens only, so a retheme reaches it too. */
+        .ld-list { list-style: none; margin: 0; padding: 0 0 env(safe-area-inset-bottom, 0px); }
+        .ld-list button {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            width: 100%;
+            min-height: 56px;          /* a comfortable tap target on its own */
+            padding: 0.6rem 1rem;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            background: none;
+            color: var(--text);
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+        .ld-list button:hover { background: var(--hover); }
+        .ld-list button[aria-current="true"] { background: var(--accent-tint); }
+        .ld-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        .ld-list .who { display: flex; flex-direction: column; min-width: 0; }
+        .ld-list .who b { font-weight: 600; }
+        .ld-list .who span {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ld-detail {
+            max-width: 720px;
+            /* clamp(), not a media query: roomy on a monitor, tight on a phone. */
+            padding: 2rem clamp(1rem, 5vw, 2.5rem) calc(2rem + env(safe-area-inset-bottom, 0px));
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        .ld-detail header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+        .ld-detail header sac-avatar { --avatar-size: 56px; flex-shrink: 0; }
+        .ld-detail h1 { font-size: 1.6rem; margin: 0; outline: none; }
+        .ld-detail header p { margin: 0.2rem 0 0; color: var(--text-muted); }
+        .ld-detail dl {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 0.6rem 1.25rem;
+            margin: 0;
+        }
+        .ld-detail dt { color: var(--text-muted); }
+        .ld-detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+        .ld-detail .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1.25rem; }
+    </style>
+</head>
+<body class="app-page">
+    <sac-nav brand="MY APP" brand-icon="cube" app-name="PEOPLE">
+        <div slot="context"><sac-theme-toggle></sac-theme-toggle></div>
+    </sac-nav>
+
+    <!-- LIST / DETAIL. One <sac-split>: list in "start", detail in "end".
+         On a wide screen both panels sit side by side and the divider
+         resizes them. `collapse` turns it into one panel at a time once the
+         SPLIT ITSELF is 768px wide or less — a phone, but also a narrow
+         sac-window on a desktop. Collapsed, `show` picks the panel: the page
+         sets show="end" when an item is opened, and the split's built-in back
+         bar sets it back to "start". Nothing re-renders — the list keeps its
+         scroll position while the detail is up. -->
+    <div class="main-layout">
+        <sac-split id="split" collapse show="start" position="32%"
+                   min-start="240px" min-end="320px" aria-label="Resize the list">
+            <ul class="ld-list" slot="start" id="list" aria-label="People"></ul>
+            <article class="ld-detail" slot="end" id="detail" aria-live="polite"></article>
+        </sac-split>
+    </div>
+
+    <sac-command-palette></sac-command-palette>
+
+    <script defer>
+        // Sample data — demo personas only. Replace with your own records.
+        const PEOPLE = [
+            { id: "ada",      name: "Ada Lovelace",      role: "Analyst",          team: "Engines",   city: "London",      tags: ["notes", "algorithms"] },
+            { id: "grace",    name: "Grace Hopper",      role: "Compiler lead",    team: "Languages", city: "Arlington",   tags: ["compilers", "debugging"] },
+            { id: "alan",     name: "Alan Turing",       role: "Researcher",       team: "Theory",    city: "Manchester",  tags: ["computability"] },
+            { id: "katherine",name: "Katherine Johnson", role: "Trajectory maths", team: "Flight",    city: "Hampton",     tags: ["orbits", "navigation"] },
+            { id: "hedy",     name: "Hedy Lamarr",       role: "Inventor",         team: "Radio",     city: "Vienna",      tags: ["frequency hopping"] },
+            { id: "charles",  name: "Charles Babbage",   role: "Engineer",         team: "Engines",   city: "London",      tags: ["difference engine"] },
+        ];
+
+        const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+        window.addEventListener("DOMContentLoaded", () => {
+            const split  = document.getElementById("split");
+            const list   = document.getElementById("list");
+            const detail = document.getElementById("detail");
+            let current = PEOPLE[0].id;
+
+            list.innerHTML = PEOPLE.map((p) => `
+                <li><button type="button" data-id="${p.id}">
+                    <sac-avatar name="${esc(p.name)}"></sac-avatar>
+                    <span class="who"><b>${esc(p.name)}</b><span>${esc(p.role)} · ${esc(p.team)}</span></span>
+                </button></li>`).join("");
+
+            function render(id) {
+                const p = PEOPLE.find((x) => x.id === id) || PEOPLE[0];
+                current = p.id;
+                list.querySelectorAll("button").forEach((b) =>
+                    b.setAttribute("aria-current", String(b.dataset.id === p.id)));
+                detail.innerHTML = `
+                    <header>
+                        <sac-avatar name="${esc(p.name)}"></sac-avatar>
+                        <div><h1 tabindex="-1">${esc(p.name)}</h1><p>${esc(p.role)}</p></div>
+                    </header>
+                    <dl>
+                        <dt>Team</dt><dd>${esc(p.team)}</dd>
+                        <dt>City</dt><dd>${esc(p.city)}</dd>
+                        <dt>Handle</dt><dd><code>@${esc(p.id)}</code></dd>
+                    </dl>
+                    <div class="chips">${p.tags.map((t) => `<sac-chip label="${esc(t)}"></sac-chip>`).join("")}</div>`;
+            }
+
+            // Open an item: render it, then — only matters while collapsed —
+            // bring the detail panel forward. On a wide screen `show` is
+            // ignored and the detail simply updates beside the list.
+            list.addEventListener("click", (e) => {
+                const btn = e.target.closest("button[data-id]");
+                if (!btn) return;
+                render(btn.dataset.id);
+                split.show = "end";
+                // Collapsed, the list just vanished under the user's focus:
+                // hand it to the detail heading so a screen reader follows.
+                if (split.collapsed) detail.querySelector("h1").focus({ preventScroll: true });
+            });
+
+            // The back bar (or split.back()) returns to the list; put focus
+            // back on the row the user came from. preventDefault() here would
+            // keep the detail up instead, e.g. to confirm unsaved edits.
+            split.addEventListener("sac:split-back", () => {
+                requestAnimationFrame(() =>
+                    list.querySelector(`button[data-id="${current}"]`)?.focus({ preventScroll: true }));
+            });
+
+            render(current);
+        });
+    </script>
+</body>
+</html>

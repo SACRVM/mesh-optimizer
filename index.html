@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Mesh Optimizer</title>
+
+    <!-- The harness: the app alone, no desktop, F5 to develop.
+         The kit is vendored — kit/ is the release copy, verbatim, never
+         edited here (kit/VERSION says which). Local, offline, no CDN. -->
+    <link rel="stylesheet" href="kit/css/ui.css">
+    <script defer src="kit/js/all.js"></script>
+
+    <style>
+        /* The app's identity, as a desktop would seed it from app.json —
+           this page never loads on a host, so :root is safely our own. */
+        :root { --accent: #3b82f6; }
+    </style>
+
+    <script defer>
+        // The app is injected AFTER the kit — exactly what a desktop does
+        // before it opens you (all.js injects its scripts, and injected
+        // scripts do not hold up DOMContentLoaded).
+        function loadApp() {
+            const s = document.createElement("script");
+            s.src = "app.js";
+            document.head.appendChild(s);
+        }
+        if (window.sacReady) loadApp();
+        else document.addEventListener("sac:ready", loadApp, { once: true });
+    </script>
+</head>
+<body class="app-page">
+    <!-- The app is complete and draws its own chrome. With no host calling
+         mount(), sac.app.Element mounts it with a standalone context. -->
+    <app-mesh-optimizer></app-mesh-optimizer>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+    "id": "my-dialog-app",
+    "name": "My Dialog App",
+    "icon": "note",
+    "description": "One sentence about what it does — a desktop shows this on the tile.",
+    "kind": "window",
+    "tag": "app-my-dialog-app",
+    "entry": "app.js",
+    "version": "1.0.0",
+    "width": "420px",
+    "height": "360px"
+}

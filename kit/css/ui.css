@@ -1,0 +1,1514 @@
+/* ==========================================================================
+   SACRVM APPKIT — global stylesheet
+   Tokens, element baseline, CSS patterns and page layouts in one file.
+
+   THEMING MODEL — seeds in, everything else derived:
+   A theme is (a) a handful of SEED colors and (b) a light-or-dark flag.
+   Every other color in the kit is DERIVED from the seeds via color-mix(),
+   so swapping seeds (or flipping the flag) re-themes every component and
+   pattern at once. Components never use raw colors — seeds and derived
+   tokens only.
+
+   - Dark is the default (:root). Its seed values are the kit's proven
+     production palette.
+   - Light mode: <html data-theme="light"> — swaps the neutral seeds and the
+     few direction-dependent derivations. Nothing else changes.
+   - Custom theme: override seeds after this file loads. Example:
+
+       :root { --accent: #10b981; }                     (per-app accent)
+       :root[data-theme="light"] { --bg: #fdf6ec; }     (custom light ground)
+
+   This file is REQUIRED by every kit component. Components reference the
+   tokens without fallback values on purpose: a missing ui.css should fail
+   loudly (unstyled), not silently drift (var() fallbacks rot).
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Fonts — self-hosted (OFL 1.1), latin + latin-ext subsets.
+   Inter 400/500/600 (body/UI), Outfit 600/700/800 (display/headlines).
+   Anything outside the unicode-ranges falls back to the system sans stack.
+   -------------------------------------------------------------------------- */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 600;
+    font-display: swap;
+    src: url('../fonts/inter-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 600 800;
+    font-display: swap;
+    src: url('../fonts/outfit-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Outfit';
+    font-style: normal;
+    font-weight: 600 800;
+    font-display: swap;
+    src: url('../fonts/outfit-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* --------------------------------------------------------------------------
+   2. SEEDS — the whole theme is these values + the light/dark flag.
+   -------------------------------------------------------------------------- */
+:root {
+    /* Native chrome (select popups, date pickers, autofill, scrollbars)
+       follows the app's scheme. Flipped by [data-theme="light"]. */
+    color-scheme: dark;
+
+    /* Neutral seeds — shared-hue slate family (bg/panel/glass sharing one
+       hue makes a raised surface read as raised, not foreign). */
+    --bg:      #0b0f1a;     /* page ground */
+    --fg:      #f8fafc;     /* foreground: text, borders, hover washes */
+    --surface: #1e293b;     /* the glassmorphic material (tiles, windows) */
+
+    /* Semantic seeds. --accent is THE per-app override point (one variable
+       re-themes a whole app). The other four encode state, separate from
+       brand identity. */
+    --accent:      #3b82f6; /* app identity / primary actions */
+    --accent-edit: #a855f7; /* edit modes */
+    --accent-warm: #f97316; /* shared/unsaved/attention state */
+    --danger:      #ef4444; /* destructive / overdue */
+    --ok:          #22c55e; /* success */
+    --on-accent:   #ffffff; /* ink on accent/edit/danger FILLS; warm + ok
+                               take the dark inks --on-warm/--on-ok instead
+                               (see the AA layer in the derived block) */
+
+    /* Direction poles for derivation: surfaces "lift" toward --lift when
+       raised; shadows and sunken fields mix toward --sink. */
+    --lift: #ffffff;
+    --sink: #000000;
+
+    /* Viewport ground (canvas areas) — black in every theme by convention;
+       override per app if a light viewport is wanted. */
+    --viewport-bg: #000000;
+
+    /* Data palette — 10 named slots for user-colored things (chips, labels,
+       series). Persisted data stores the slot NAME, not a hex, so a re-theme
+       never rewrites stored records. Not derived: it IS data. */
+    --palette-blue:   #3b82f6;
+    --palette-orange: #f97316;
+    --palette-red:    #ef4444;
+    --palette-green:  #10b981;
+    --palette-purple: #8b5cf6;
+    --palette-pink:   #ec4899;
+    --palette-yellow: #eab308;
+    --palette-teal:   #14b8a6;
+    --palette-gray:   #64748b;
+    --palette-indigo: #6366f1;
+
+    /* Motion rails — use these instead of ad-hoc cubic-beziers so all views
+       stay in one motion language. */
+    --ease-bounce: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-swift:  cubic-bezier(0.77, 0, 0.175, 1);   /* panel slides */
+
+    /* Shape scale — one radius per element class; identical in every theme
+       (never redeclared in a [data-theme] block). Override the three vars
+       to resharpen or soften the whole kit at once. */
+    --radius-s: 2px;   /* mini elements: strips, tracks, tiny thumbs, inner wells */
+    --radius-m: 4px;   /* controls: buttons, inputs, chips, menu items, tabs */
+    --radius-l: 6px;   /* surfaces: panels, cards, tiles, windows, dialogs, popovers, toasts */
+
+    /* Small ghost icon button — ONE measure for the light-DOM .icon-btn and
+       the shadow buttons that must match it (sac-copy-button). Custom
+       properties cross shadow roots; a class does not. 14/26 ≈ the kit's
+       ~56% icon-to-box ratio. */
+    --icon-btn-size: 26px;
+    --icon-btn-icon: 14px;
+
+    /* Tool button — ONE measure for <sac-toolbox>'s tools and the light-DOM
+       .icon-btn.tool beside them (a selection-actions row under a tool box),
+       so the two can never drift. 18/32 is the same ~56% ratio. Grows to
+       44px under a coarse pointer (§15). */
+    --tool-btn-size: 32px;
+    --tool-btn-icon: 18px;
+
+    /* Caption / eyebrow type — the ONE shared shape for uppercase section
+       titles (sac-section) and lone light-DOM captions (.sac-caption), so the
+       two can never drift. Colour is deliberately NOT here: it is per role —
+       a group heading stands out (--text), a caption stays quiet (--text-muted). */
+    --caption-font:     'Outfit', sans-serif;
+    --caption-size:     0.78rem;
+    --caption-weight:   700;
+    --caption-tracking: 0.12em;
+}
+
+/* --------------------------------------------------------------------------
+   3. DERIVED TOKENS — never set these in a theme; override a seed instead.
+   (The cascade still lets a brand pin an individual derived token if it
+   truly must — that is the escape hatch, not the mechanism.)
+
+   Also derived ON the per-app hosts, not only on :root. An app that carries
+   its own --accent would otherwise get half a retheme: direct var(--accent)
+   users follow it, while everything derived still resolves against the root's
+   accent — custom properties are substituted where they are DECLARED, so a
+   derivation living only on :root has the root's seed baked in.
+
+   .sac-app is set by sac.app.Element on every app element, so an app is an
+   accent scope wherever it runs — on a desktop's stage, in a window, or
+   alone in its own page. .sac-app-view and sac-window cover apps that
+   implement the contract by hand.
+
+   BUT: a token that flips with the light/dark flag must NOT be redeclared on
+   these per-app scopes, or the scope's dark-direction copy shadows the light
+   override on :root and every app/window renders dark tokens on light ground.
+   So the direction-dependent, accent-INDEPENDENT tokens (--field, --glass*,
+   --panel*, --shadow-*) live on :root ALONE, below. The state-as-text layer
+   is direction-dependent AND accent-dependent, so it stays on the scopes and
+   reads its direction from flag variables (--text-solve + *-pct) instead.
+   -------------------------------------------------------------------------- */
+:root {
+    /* Direction-dependent, accent-independent — :root only (see note above);
+       these are the DARK values, the light/auto blocks flip them. Because an
+       app scope never redeclares them, they inherit correctly per theme. */
+    --field:       color-mix(in srgb, var(--sink) 30%, transparent);        /* input/select bg   */
+    --glass:       color-mix(in srgb, var(--glass-hue) 70%, transparent);   /* windows, overlays */
+    --glass-strong:color-mix(in srgb, var(--glass-hue) 88%, transparent);   /* menus, nav ribbon */
+    --panel:       color-mix(in srgb, var(--bg) 95%, var(--lift));      /* sidebars, cards   */
+    --panel-2:     color-mix(in srgb, var(--bg) 90%, var(--lift));      /* elevated panel    */
+    --shadow-1: 0 2px 8px  color-mix(in srgb, var(--sink) 35%, transparent);
+    --shadow-2: 0 8px 24px color-mix(in srgb, var(--sink) 45%, transparent);
+
+    /* State-as-text direction, flag-flipped: dark solves toward --lift, light
+       toward --sink; the per-token percentage flips too (100% = raw seed). The
+       *-text tokens themselves are derived on the accent scopes below. */
+    --text-solve:           var(--lift);
+    --accent-text-pct:       90%;
+    --accent-edit-text-pct:  86%;
+    --accent-warm-text-pct: 100%;
+    --danger-text-pct:       89%;
+    --ok-text-pct:          100%;
+}
+:root,
+.sac-app,
+.sac-app-view,
+sac-window {
+    /* Surfaces — accent-independent but direction-INdependent (the flipped
+       seed already produces the right value), so these may live on the scopes. */
+    --glass-hue:   color-mix(in srgb, var(--surface) 45%, var(--bg));   /* internal carrier  */
+    --tile:        color-mix(in srgb, var(--surface) 70%, transparent);     /* launcher tiles    */
+    --tile-hover:  color-mix(in srgb, var(--surface) 90%, transparent);
+
+    /* Text — two-step secondary: --text-muted carries real secondary
+       information (AA on every plane); --text-dim is strictly tertiary,
+       never the only carrier of information, and holds 3:1 on --surface —
+       the worst-case (lightest) plane — in both themes at this ratio. */
+    --text:       var(--fg);
+    --text-muted: color-mix(in srgb, var(--fg) 62%, var(--bg));
+    --text-dim:   color-mix(in srgb, var(--fg) 43%, var(--bg));
+
+    /* Lines + washes */
+    --border:        color-mix(in srgb, var(--fg) 8%, transparent);
+    --border-strong: color-mix(in srgb, var(--fg) 16%, transparent);
+    --hover:         color-mix(in srgb, var(--fg) 8%, transparent);   /* hover wash        */
+    --hover-strong:  color-mix(in srgb, var(--fg) 14%, transparent);  /* active/press wash */
+
+    /* Transparency checker. --checker is the translucent square a CSS
+       checkerboard lays over whatever surface it sits on (the .checker
+       utility, color wells, swatches). --checker-a/-b are an OPAQUE pair for
+       canvases, which cannot composite over the page (sac-pixel-canvas).
+       --pixel-grid is the hairline between enlarged pixels. */
+    --checker:    color-mix(in srgb, var(--fg) 10%, transparent);
+    --checker-a:  color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --checker-b:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --pixel-grid: color-mix(in srgb, var(--fg) 9%, transparent);
+
+    /* Accent derivations — follow --accent automatically, so the per-app
+       accent override re-themes these too. */
+    --accent-strong: color-mix(in oklab, var(--accent) 82%, var(--sink)); /* hover of primary */
+    --accent-tint:   color-mix(in srgb, var(--accent) 16%, transparent);  /* active-item bg   */
+    --accent-glow:   color-mix(in srgb, var(--accent) 30%, transparent);  /* glows, shadows   */
+
+    /* AA layer — a state color has two jobs at two contrast bars, and one
+       lightness cannot serve both: identity (rings, borders, icons — 3:1)
+       stays the seed itself; a plane that CARRIES TEXT needs 4.5:1 with its
+       ink. Every ratio below is solved against the default seeds and the
+       worst-case plane; a brand pouring in very different seeds re-checks
+       (or pins) these.
+       Warm + ok keep the seed as fill — white can never reach 4.5:1 on those
+       hues (a property of the hue, not a calibration issue) — and take a
+       dark ink instead. */
+    --accent-fill:      color-mix(in oklab, var(--accent) 91%, var(--sink));
+    --accent-edit-fill: color-mix(in oklab, var(--accent-edit) 93%, var(--sink));
+    --danger-fill:      color-mix(in oklab, var(--danger) 91%, var(--sink));
+    --accent-warm-fill: var(--accent-warm);
+    --ok-fill:          var(--ok);
+
+    --on-edit:   var(--on-accent);
+    --on-danger: var(--on-accent);
+    --on-warm:   color-mix(in srgb, var(--sink) 68%, var(--accent-warm));
+    --on-ok:     color-mix(in srgb, var(--sink) 63%, var(--ok));
+
+    /* The same state colors, readable as TEXT on this theme's ground. Derived
+       here (so a per-app accent re-solves them), but the direction — mix
+       target and strength — comes from the flag variables on :root, so light
+       and dark both resolve correctly INSIDE an app scope. */
+    --accent-text:      color-mix(in oklab, var(--accent)      var(--accent-text-pct),      var(--text-solve));
+    --accent-edit-text: color-mix(in oklab, var(--accent-edit) var(--accent-edit-text-pct), var(--text-solve));
+    --accent-warm-text: color-mix(in oklab, var(--accent-warm) var(--accent-warm-text-pct), var(--text-solve));
+    --danger-text:      color-mix(in oklab, var(--danger)      var(--danger-text-pct),      var(--text-solve));
+    --ok-text:          color-mix(in oklab, var(--ok)          var(--ok-text-pct),          var(--text-solve));
+
+    /* Scrollbar thumb colours. As custom properties these DO inherit through
+       shadow boundaries, so a shadow scroller reuses them in its own copy of
+       the section 5 recipe (see sac-window .content / sac-nav .panel). */
+    --scrollbar-thumb:       color-mix(in srgb, var(--fg) 18%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--fg) 32%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   4. LIGHT FLAG — swaps neutral seeds + the few direction-dependent
+   derivations. Semantic seeds and the palette stay (they read fine on light
+   ground); override them per brand if needed.
+   -------------------------------------------------------------------------- */
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    --bg:      #eef2f7;
+    --fg:      #0f172a;
+    --surface: #ffffff;
+    /* Raised surfaces still lift toward white on light ground (material
+       convention); shadows still sink toward black — poles stay. */
+
+    /* Direction-dependent re-derivations (same seeds, different ratios): */
+    --field:    color-mix(in srgb, var(--sink) 5%, transparent);
+    --shadow-1: 0 2px 8px  color-mix(in srgb, var(--sink) 12%, transparent);
+    --shadow-2: 0 8px 24px color-mix(in srgb, var(--sink) 18%, transparent);
+    --glass:        color-mix(in srgb, var(--glass-hue) 78%, transparent);
+    --glass-strong: color-mix(in srgb, var(--glass-hue) 92%, transparent);
+
+    /* Elevation must step PERCEPTIBLY toward white here — the dark ratios
+       (95/90% of an already almost-white bg) leave no visible lift
+       (measured: dL 0.002 per step, far below perceptibility). */
+    --panel:   color-mix(in srgb, var(--bg) 62%, var(--lift));
+    --panel-2: color-mix(in srgb, var(--bg) 30%, var(--lift));
+
+    /* State-as-text re-solved for a white worst-case plane — flip the shared
+       flag variables, and the *-text tokens on the accent scopes follow. */
+    --text-solve:           var(--sink);
+    --accent-text-pct:       91%;
+    --accent-edit-text-pct:  93%;
+    --accent-warm-text-pct:  81%;
+    --danger-text-pct:       91%;
+    --ok-text-pct:           75%;
+}
+
+/* `data-theme="auto"` follows the OS instead of an explicit choice — same
+   declarations as the light block above, gated behind prefers-color-scheme.
+   Keep this block in sync with the light block above. */
+@media (prefers-color-scheme: light) {
+    :root[data-theme="auto"] {
+        color-scheme: light;
+
+        --bg:      #eef2f7;
+        --fg:      #0f172a;
+        --surface: #ffffff;
+
+        --field:    color-mix(in srgb, var(--sink) 5%, transparent);
+        --shadow-1: 0 2px 8px  color-mix(in srgb, var(--sink) 12%, transparent);
+        --shadow-2: 0 8px 24px color-mix(in srgb, var(--sink) 18%, transparent);
+        --glass:        color-mix(in srgb, var(--glass-hue) 78%, transparent);
+        --glass-strong: color-mix(in srgb, var(--glass-hue) 92%, transparent);
+
+        --panel:   color-mix(in srgb, var(--bg) 62%, var(--lift));
+        --panel-2: color-mix(in srgb, var(--bg) 30%, var(--lift));
+
+        --text-solve:           var(--sink);
+        --accent-text-pct:       91%;
+        --accent-edit-text-pct:  93%;
+        --accent-warm-text-pct:  81%;
+        --danger-text-pct:       91%;
+        --ok-text-pct:           75%;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   5. Scrollbars — global. NOTE: `*` does NOT pierce Shadow DOM; components
+   with scrollable shadow content must duplicate these rules inside.
+
+   Chromium and Safari draw the KIT's bar (::-webkit-scrollbar below): a
+   6px thumb with 2px of air on both sides, no arrow buttons, the same on
+   every OS. The standard pair (scrollbar-width/-color) is for Firefox ONLY:
+   since Chrome 121 a set scrollbar-color — which is INHERITED, even into
+   shadow roots — makes Chrome ignore every ::-webkit-scrollbar rule and
+   paint its native bar (on Windows: arrow buttons, the thumb off-centre in
+   its track, "too much room on the right").
+   -------------------------------------------------------------------------- */
+@supports not selector(::-webkit-scrollbar) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 999px;   /* a pill — the one rounded exception to the shape scale */
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: content-box;
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* --------------------------------------------------------------------------
+   6. Base
+   -------------------------------------------------------------------------- */
+/* `*` alone does NOT match pseudo-elements and box-sizing is not inherited, so
+   a bordered ::before/::after would otherwise size as content-box and mis-centre
+   (e.g. a dot on a connector line). Include the pseudo-elements — the standard
+   modern reset. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    min-height: 100dvh;   /* mobile: the toolbar slides in and out; dvh follows it */
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    /* Mobile browsers flash a grey/blue box over anything tapped. Every kit
+       control draws its own press state, so the flash only adds noise.
+       Inherited — reaches into the shadow roots too. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* Block-level link cards are buttons in spirit — hover-underlining their
+   whole text body reads as a rendering glitch. (0,2,0) outweighs (0,1,1). */
+.tile:hover { text-decoration: none; }
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   7. Form baseline
+   -------------------------------------------------------------------------- */
+label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+input, textarea {
+    font-family: inherit;
+    color: var(--text);
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 0.6rem;
+    width: 100%;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+input:hover:not(:disabled) {
+    border-color: var(--border-strong);
+}
+input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Hide native number spinners */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Selection is re-enabled where text entry happens (workspace pages set
+   user-select:none on body). */
+input, textarea, [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* <select>: appearance:none kills the native arrow; we paint our own chevron
+   on a thin wrapper. The wrapper is REQUIRED — <select> is a replaced element
+   and can host neither an inline SVG nor a ::after — so a bare <select> shows
+   no arrow. Wrap it:  <span class="select"><select>…</select></span>
+
+   The chevron is an SVG MASK filled with background-color: var(--text-muted),
+   so it follows the theme with ZERO colour literals and needs no light/auto
+   overrides (the token flips on its own). White stroke so it reads as both
+   luminance (CSS mask) and alpha (-webkit-mask). */
+select {
+    appearance: none;
+    width: 100%;
+    background-color: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 8px 32px 8px 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+select:focus { border-color: var(--accent); }
+select option { background-color: var(--panel); color: var(--text); }
+.select { position: relative; display: block; }
+.select::after {
+    content: "";
+    position: absolute;
+    top: 50%; right: 12px;
+    width: 12px; height: 12px;
+    transform: translateY(-50%);
+    pointer-events: none;                 /* clicks fall through to the select */
+    background-color: var(--text-muted);  /* the ONE token that colours the arrow */
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat center / contain;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
+input[type="checkbox"], input[type="radio"] {
+    width: auto;
+    accent-color: var(--accent);
+}
+
+/* Table & kbd baseline — plain markup, no class required. */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+th {
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    font-weight: 700;
+    padding: 0.45rem 0.9rem 0.45rem 0;
+    border-bottom: 1px solid var(--border-strong);
+}
+td {
+    padding: 0.55rem 0.9rem 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    vertical-align: top;
+}
+tbody tr:hover {
+    background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+
+kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82em;
+    background: var(--field);
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-s);
+    padding: 2px 6px;
+    color: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   8. Buttons
+   .btn is THE button (one class, replacing the legacy .btn/.tool-btn pair).
+   Default: full-width uppercase sidebar button. Inside a .toolbar it shrinks
+   to the 32px ribbon recipe — no repeated inline styles anywhere.
+   -------------------------------------------------------------------------- */
+.btn {
+    /* A glyph at ~56% of the control box — the kit's icon-to-button ratio.
+       Set on the button (not on a dead `.btn svg` rule) so it crosses into
+       <sac-icon>'s shadow root; 18/32. */
+    --icon-size: 18px;
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-m);
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    transition: all 0.2s ease;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.btn:hover:not(:disabled) {
+    background: var(--hover);
+    border-color: var(--accent);
+}
+.btn.primary {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    border-color: transparent;
+    transition: all 0.2s var(--ease-bounce);
+}
+.btn.primary:hover:not(:disabled) {
+    background: var(--accent-strong);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+.btn.danger {
+    background: var(--danger-fill);
+    border-color: transparent;
+    color: var(--on-danger);
+}
+.btn.danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--danger) 82%, var(--sink));
+}
+.btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+/* [hidden] needs saying out loud here too: .btn's display:flex beats the
+   UA's hidden rule (the same trap .sac-app-view guards against). */
+.btn[hidden] { display: none; }
+
+/* Toolbar recipe — for nav [slot="toolbar"] content and any button strip. */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.toolbar .btn {
+    width: auto;
+    height: 32px;
+    padding: 0 0.8rem;
+    font-size: 0.68rem;
+}
+
+/* Round icon button for ribbons/toolbars. */
+.nav-icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s var(--ease-smooth);
+    padding: 0;
+    /* 20/36 = the same ~56% ratio. A custom property crosses into
+       <sac-icon>'s shadow root, which the `.nav-icon-btn svg` rule below
+       cannot — the host tools hold a <sac-icon>, not an inline <svg>. */
+    --icon-size: 20px;
+}
+.nav-icon-btn:hover {
+    background: var(--hover);
+    color: var(--text);
+    transform: translateY(-1px);
+}
+.nav-icon-btn:active {
+    transform: translateY(0);
+    background: var(--hover-strong);
+}
+/* A light-DOM inline <svg> (rare now — host tools use <sac-icon>) follows the
+   same --icon-size, so both icon forms come out the same size. */
+.nav-icon-btn svg {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+a.nav-icon-btn { text-decoration: none; }
+/* The labeled variant: same height, a pill instead of a circle. A host's
+   signed-in user chip renders with it (sac-nav host tools), and an app can
+   use it for its own labeled ribbon buttons just the same. */
+.nav-icon-btn.labeled {
+    width: auto;
+    padding: 0 12px;
+    gap: 0.4rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+}
+/* The avatar variant: the button wears an identity <sac-avatar> instead of an
+   icon glyph — a signed-in user in the ribbon (sac-nav host tools). The base
+   button is already a round, padding-0 target and the avatar carries its own
+   round shape, so this only sizes the avatar to sit inside with the usual
+   hover ring. Combines with .labeled (avatar + name in the pill). */
+.nav-icon-btn.avatar { --avatar-size: 26px; }
+
+/* Small ghost icon button for rows, lists and cards — the light-DOM twin of
+   <sac-copy-button>'s inner button. Both read --icon-btn-size/--icon-btn-icon,
+   so a delete button beside a copy button stays its twin across kit upgrades. */
+.icon-btn {
+    --icon-size: var(--icon-btn-icon);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--icon-btn-size);
+    height: var(--icon-btn-size);
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-m);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 120ms var(--ease-smooth), background 120ms var(--ease-smooth);
+}
+.icon-btn:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+}
+.icon-btn:active:not(:disabled) { background: var(--hover-strong); }
+.icon-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.icon-btn.danger:hover:not(:disabled) { color: var(--danger-text); }
+.icon-btn:disabled { opacity: 0.3; cursor: default; }
+.icon-btn[hidden] { display: none; }
+/* The tool-sized variant: <sac-toolbox>'s measure and states, for action
+   buttons that sit next to tools. It re-points the icon-btn tokens, so the
+   touch halo below computes from the right box too. */
+.icon-btn.tool {
+    --icon-btn-size: var(--tool-btn-size);
+    --icon-btn-icon: var(--tool-btn-icon);
+    color: var(--text-muted);
+}
+.icon-btn.tool.active,
+.icon-btn.tool[aria-pressed="true"] {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+}
+.icon-btn svg {
+    width: var(--icon-size);
+    height: var(--icon-size);
+}
+@media (prefers-reduced-motion: reduce) {
+    .icon-btn { transition: none; }
+}
+
+/* --------------------------------------------------------------------------
+   9. Panels, cards, menus, logs (CSS patterns — documented in the style guide)
+   -------------------------------------------------------------------------- */
+/* Caption / eyebrow: the section-title shape as a light-DOM utility, so an app
+   can label a lone caption without hand-copying sac-section's title. Both read
+   the --caption-* tokens; a standalone caption is quiet (--text-muted), while a
+   section heading overrides to --text — set your own colour to lift it. */
+.sac-caption {
+    font-family: var(--caption-font);
+    font-size: var(--caption-size);
+    font-weight: var(--caption-weight);
+    letter-spacing: var(--caption-tracking);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* About window content — rendered by sac.about.open() into a <sac-window>.
+   The one shared credits/licence surface: a host and an app both use it, so
+   the two look related by construction. Reuses .sac-caption for the version
+   line and each notice's title. */
+.sac-about { display: flex; flex-direction: column; gap: 1rem; }
+.sac-about-head { display: flex; align-items: center; gap: 0.75rem; }
+.sac-about-head sac-icon { --icon-size: 30px; color: var(--accent); }
+.sac-about-head h2 { margin: 0; font-size: 1.05rem; line-height: 1.2; }
+.sac-about-head .sac-caption { margin: 0.15rem 0 0; }
+.sac-about-desc { margin: 0; color: var(--text-muted); }
+.sac-about-notice { display: flex; flex-direction: column; gap: 0.3rem; }
+.sac-about-notice p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+
+.card {
+    background: var(--panel);
+    padding: 1.25rem;
+    border-radius: var(--radius-l);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-1);
+}
+
+.glass {
+    background: var(--glass-strong);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+}
+
+.floating-menu {
+    position: absolute;
+    z-index: 1000;
+    background: var(--glass-strong);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-l);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: var(--shadow-2);
+    min-width: 160px;
+    pointer-events: all;
+    user-select: none;
+}
+.floating-menu-header {
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+}
+.floating-menu .btn {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px;
+}
+
+/* Plain div-based log box (the component <sac-log> is the richer option). */
+.log {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    height: 100px;
+    overflow-y: auto;
+    background: var(--field);
+    padding: 0.75rem;
+    border-radius: var(--radius-m);
+    border: 1px solid var(--border);
+    font-family: monospace;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Skeleton — shimmering placeholder block for content still loading. */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 6%, transparent), transparent);
+    animation: skeleton-sweep 1.6s infinite var(--ease-smooth);
+}
+.skeleton.text {
+    height: 0.9em;
+    border-radius: var(--radius-s);
+}
+.skeleton.circle {
+    border-radius: 50%;
+}
+@keyframes skeleton-sweep {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(100%); }
+}
+
+/* Transparency checker — any surface that shows "nothing here" behind
+   pixels (a preview canvas, an alpha well). Token squares over whatever
+   ground the element has; --checker-size sets the square (default 8px).
+   Pair with image-rendering: pixelated on the canvas/img it backs. */
+.checker {
+    --checker-size: 8px;
+    background-image:
+        linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+        linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+    background-size: var(--checker-size) var(--checker-size);
+    background-position: 0 0, calc(var(--checker-size) / 2) calc(var(--checker-size) / 2);
+}
+
+/* --------------------------------------------------------------------------
+   10. Breadcrumbs, pagination, empty states, badges
+   (CSS patterns — documented on the style guide's Patterns page)
+   -------------------------------------------------------------------------- */
+
+/* Breadcrumbs — <ol class="crumbs"><li><a href="…">…</a></li>…
+   <li aria-current="page">Current</li></ol>. Last crumb is either plain text
+   or carries aria-current="page" on the <li> or an inner <a>. */
+.crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.8rem;
+}
+.crumbs li {
+    display: flex;
+    align-items: center;
+}
+.crumbs li + li::before {
+    content: "\203A";
+    margin: 0 0.5rem;
+    color: var(--text-dim);
+}
+.crumbs a {
+    color: var(--text-muted);
+}
+.crumbs a:hover {
+    color: var(--text);
+}
+.crumbs [aria-current="page"] {
+    color: var(--text);
+    font-weight: 500;
+}
+
+/* Pagination — <nav class="pagination"> of <button>/<a> page items, an
+   optional non-interactive ellipsis (.gap), and prev/next controls that use
+   the same items disabled via :disabled (button) or .disabled/[aria-disabled]
+   (anchor, which has no native disabled state). */
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.pagination button,
+.pagination a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 0.4rem;
+    border: none;
+    border-radius: var(--radius-m);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.pagination button:hover:not(:disabled),
+.pagination a:hover:not(.disabled) {
+    background: var(--hover);
+    color: var(--text);
+}
+.pagination button.active,
+.pagination a.active,
+.pagination button[aria-current="page"],
+.pagination a[aria-current="page"] {
+    background: var(--accent-tint);
+    color: var(--accent);
+}
+.pagination button:disabled,
+.pagination a.disabled,
+.pagination a[aria-disabled="true"] {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.pagination .gap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 30px;
+    color: var(--text-dim);
+    cursor: default;
+}
+
+/* Empty state — centered "nothing here yet" filler for a panel or card. */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2.5rem 1rem;
+    gap: 0.4rem;
+}
+/* Direct child only: an empty state usually carries a button that offers the
+   way out, and a descendant selector would paint that button's icon dim too
+   — grey ink on a filled accent surface. */
+.empty-state > sac-icon {
+    --icon-size: 36px;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+}
+.empty-state b,
+.empty-state strong,
+.empty-state h3 {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.empty-state p {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin: 0;
+    max-width: 32ch;
+}
+.empty-state .btn {
+    width: auto;
+    margin-top: 0.75rem;
+}
+
+/* Badge dot / count — attach to any element whose parent carries
+   .has-badge (position: relative). The 2px ring is the GROUND color
+   (--bg) showing through, not a colored border, so it separates the badge
+   from whatever sits underneath without violating the no-thick-border rule. */
+.has-badge {
+    position: relative;
+}
+.badge-dot {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg);
+    pointer-events: none;
+}
+.badge-dot.warn { background: var(--accent-warm); }
+.badge-dot.danger { background: var(--danger); }
+.badge-dot.ok { background: var(--ok); }
+
+.badge-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    font-size: 0.65rem;
+    font-weight: 700;
+    /* Digits have no descenders; trim the line box to cap height so the
+       count sits in the pill's optical middle, not above it. */
+    text-box: trim-both cap alphabetic;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--bg);
+    pointer-events: none;
+}
+.badge-count.warn { background: var(--accent-warm); }
+.badge-count.danger { background: var(--danger); }
+.badge-count.ok { background: var(--ok); }
+
+/* --------------------------------------------------------------------------
+   11. Launcher / hub — tile grid
+   -------------------------------------------------------------------------- */
+.orb {
+    position: fixed;
+    width: 50vw;
+    height: 50vw;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent) 5%, transparent) 0%, transparent 70%);
+    border-radius: 50%;
+    top: -10vw;
+    right: -10vw;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.hub-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    /* 50px clears the fixed <sac-nav> — the same clearance .main-layout and
+       #app-root carry; the 4rem on top is the hero's own breathing room. */
+    padding: calc(50px + env(safe-area-inset-top, 0px) + 4rem) 2rem 2rem;
+}
+/* Inside a container that already cleared the nav (#app-root, or the shell
+   stage inside .main-layout) — take the 50px back so the two never stack. */
+#app-root .hub-container,
+.main-layout .hub-container { padding-top: 4rem; }
+.hub-container header {
+    margin-bottom: 3rem;
+}
+.hub-container h1 {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.5rem;
+}
+.hub-container .intro-text {
+    color: var(--text-muted);
+    font-size: 1.125rem;
+    margin: 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-auto-rows: 280px;
+    gap: 1.5rem;
+}
+
+.tile {
+    position: relative;
+    background: var(--tile);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-l);
+    padding: 2rem;
+    text-decoration: none;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    transition: transform 0.4s var(--ease-bounce), border-color 0.4s var(--ease-bounce),
+                box-shadow 0.4s var(--ease-bounce), background 0.4s var(--ease-bounce);
+    overflow: hidden;
+    cursor: pointer;
+    /* Persistent compositor layer: without it the browser promotes the tile
+       on hover and demotes it after, re-rasterizing the text each way — the
+       hover zoom flickers. */
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+/* Direct child only, same reason as .empty-state: the tile's own mark is
+   48px and accent-coloured, an icon inside something nested in the tile is
+   not. (Every tile in the kit and the launcher appends it directly.) */
+.tile > sac-icon {
+    --icon-size: 48px;
+    margin-bottom: auto;
+    color: var(--accent);
+    transition: transform 0.4s var(--ease-bounce);
+}
+.tile h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+.tile p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.4;
+}
+.tile:hover {
+    /* translate only, no scale: Chromium re-rasters text layers mid-scale-
+       animation (raster-scale adaption) — that is unfixable text jitter.
+       The zoom feel comes from lift + shadow + glow + the icon's own scale. */
+    transform: translateY(-8px) translateZ(0);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-2), 0 0 20px color-mix(in srgb, var(--accent) 20%, transparent);
+    background: var(--tile-hover);
+}
+.tile:hover > sac-icon {
+    transform: scale(1.1) rotate(5deg);
+}
+
+/* Variants */
+.tile.large { grid-column: span 2; }
+.tile.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+.tile.disabled:hover {
+    transform: none;
+    border-color: var(--border-strong);
+    box-shadow: none;
+    background: var(--tile);
+}
+.tile-badge {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    color: color-mix(in srgb, var(--danger) 70%, var(--fg));
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+    padding: 4px 10px;
+    border-radius: var(--radius-s);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.tile-badge.accent {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+@media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
+    .tile.large { grid-column: span 1; }
+    .grid { grid-auto-rows: 240px; }
+}
+
+/* --------------------------------------------------------------------------
+   12. Workspace layout (tool-page pattern)
+   fixed 50px nav (padding-top on .main-layout) + sidebar + viewport.
+   -------------------------------------------------------------------------- */
+.app-page {
+    /* Put this on <body> of a workspace/tool page: full-height flex column,
+       no page scroll, no text selection (inputs re-enable it). */
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;          /* not 100vw: that includes the scrollbar and overflows */
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+}
+
+.main-layout {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    /* room for the fixed 50px <sac-nav>, which grows by the notch inset */
+    padding-top: calc(50px + env(safe-area-inset-top, 0px));
+}
+
+.sidebar {
+    width: 260px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    gap: 1.25rem;
+    overflow-y: auto;
+    z-index: 90;
+}
+
+/* A .sidebar inside a sac-split panel (the resizable-sidebar recipe) hands
+   its width to the panel. On compact the drawer rule below wins (same
+   specificity, later) — no media query needed in the app. */
+.sidebar.fill { width: 100%; height: 100%; }
+
+.viewport {
+    background: var(--viewport-bg);
+    position: relative;
+    overflow: hidden;
+    flex: 1;
+    min-height: 400px;
+}
+/* Set by sac.setupPanZoom while a pan drag is in progress. */
+.viewport.grabbing { cursor: grabbing; }
+
+canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* A pan-zoom layer inside a .viewport pane (see sac.setupPanZoom). */
+.pz-layer {
+    position: absolute;
+    inset: 0;
+    transform-origin: 0 0;
+}
+
+/* --------------------------------------------------------------------------
+   13. App shell (SPA pattern) + centered card shell
+   -------------------------------------------------------------------------- */
+#app-root {
+    padding-top: calc(50px + env(safe-area-inset-top, 0px)); /* room for the fixed <sac-nav> */
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+/* Shell stage (sac.apps kind:"view") — the FULL viewport. An app is
+   complete: each mounted view draws its own chrome (nav, toolbar, rail) and
+   manages its own scrolling. The host's hull exists only inside its home
+   section; on stage, the host is present through context.host, rendered by
+   the app in its own nav. */
+.app-stage {
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    min-width: 0;
+    overflow: hidden;
+}
+/* A view fills the stage. [hidden] needs saying out loud: a custom element
+   with a display of its own beats the UA's hidden rule. */
+.sac-app-view { display: block; height: 100%; }
+.sac-app-view[hidden] { display: none; }
+/* Inside an app element, .main-layout gets its height from the view (in a
+   tool PAGE it is a flex child of .workspace instead — both end at 100dvh). */
+.sac-app-view .main-layout { height: 100%; }
+/* The host's home section scrolls itself; its own fixed nav sits above. */
+.app-home { height: 100%; overflow-y: auto; }
+/* An app's scrolling content region, beside its rail inside .main-layout —
+   the region formerly known as the shell's stage scroll. */
+.app-scroll {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    position: relative;
+    /* Content is text people copy — .app-page switched selection off for the
+       chrome, this region switches it back on. */
+    -webkit-user-select: text;
+    user-select: text;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.center-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+.center-card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--tile);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-l);
+    padding: 3rem 2.5rem;
+    text-align: center;
+}
+.center-card h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+.center-card .tagline {
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+}
+
+/* --------------------------------------------------------------------------
+   14. Reduced motion — global user preference.
+   NOTE: `*` does NOT pierce Shadow DOM (see section 5) — this collapses
+   animations/transitions in the light DOM only. Components with their own
+   animations must carry their own prefers-reduced-motion query inside the
+   shadow root.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   15. RESPONSIVE — phones and small tablets.
+   An app built only from the kit works on a 360px portrait phone without a
+   media query of its own. Desktop (>= 1024px) is untouched by everything below.
+
+   Breakpoints — fixed values, not tokens (custom properties cannot be used
+   inside a media query), so they are written out and documented here:
+     compact  (max-width: 768px),              page layout: the rail becomes a
+              (max-height: 480px) and          drawer, paddings shrink, sac-dialog
+              (pointer: coarse)                becomes a sheet, sac-window opens
+                                               maximized. The second half is a
+                                               phone held sideways (844 x 390):
+                                               wide, but far too short for the
+                                               desktop layout. Copy the whole
+                                               query when you need "compact".
+     narrow   (max-width: 480px)  a second step, ONLY where a component truly
+                                  needs one.
+
+   Who reacts to what:
+   - PAGE layout (.main-layout, the rail, sac-nav, dialogs, windows) reacts to
+     @media — the page is its container.
+   - COMPONENTS react to their OWN container (container-type: inline-size +
+     @container), because they also live in sac-windows and sac-split panels
+     that are narrow on a wide screen. Put the container on an inner wrapper
+     or on a block-level host only: inline-size containment stops an element
+     from sizing to its content, so a shrink-to-fit host would collapse to 0.
+   - Shadow components carry their own queries: a light-DOM @media rule does
+     not pierce a shadow root (same caveat as reduced motion, section 14).
+
+   Input capability, not width:
+   - (pointer: coarse) — every control gets a 44 x 44px hit area (not always
+     a 44px look) and text fields get 16px type, which stops iOS zooming the
+     page on focus.
+   - (hover: none) — nothing may be reachable by hover alone. Anything that is
+     only REVEALED on hover (the .hover-reveal utility below) is shown for good.
+   -------------------------------------------------------------------------- */
+:root {
+    /* The off-canvas drawer's width — the rail on compact, and the sac-nav
+       burger panel beside it. */
+    --drawer-width: min(300px, 85vw);
+}
+
+/* Hover-reveal utility: row actions, copy buttons and other secondary icons
+   that stay quiet until the row is pointed at or focused.
+     <li class="reveal-on-hover">Title <button class="icon-btn hover-reveal">…</button></li>
+   On a touch screen there is no hover, so they are simply always shown. */
+.reveal-on-hover .hover-reveal {
+    opacity: 0;
+    transition: opacity 120ms var(--ease-smooth);
+}
+.reveal-on-hover:hover .hover-reveal,
+.reveal-on-hover:focus-within .hover-reveal { opacity: 1; }
+
+/* sac-nav's toolbar overflow parks the buttons that do not fit behind its
+   "…" menu by marking them. Light DOM, so the rule lives here. */
+[data-sac-overflow] { display: none !important; }
+
+@media (hover: none) {
+    .reveal-on-hover .hover-reveal { opacity: 1; }
+    /* A tap leaves :hover stuck on the tapped element until the next tap
+       elsewhere — a lifted tile or a raised button must not stay raised. */
+    .tile:hover { transform: translateZ(0); box-shadow: none; border-color: var(--border-strong); background: var(--tile); }
+    .tile:hover > sac-icon { transform: none; }
+    .btn.primary:hover:not(:disabled) { transform: none; box-shadow: none; }
+    .nav-icon-btn:hover { transform: none; }
+}
+
+@media (pointer: coarse) {
+    :root { --tool-btn-size: 44px; }
+    .btn { min-height: 44px; }
+    /* In a toolbar/ribbon the button keeps its 32px look — a 44px fill
+       would crowd the 50px ribbon — and an invisible halo takes the hit
+       area to 44px instead. */
+    .toolbar .btn { min-height: 0; position: relative; }
+    .toolbar .btn::after {
+        content: "";
+        position: absolute;
+        inset: -6px 0;
+    }
+    .nav-icon-btn { width: 44px; height: 44px; }
+    .nav-icon-btn.labeled { width: auto; }
+    /* The small icon button keeps its 26px look; an invisible halo takes
+       the hit area to 44px. */
+    .icon-btn { position: relative; }
+    .icon-btn::after {
+        content: "";
+        position: absolute;
+        inset: calc((var(--icon-btn-size) - 44px) / 2);
+    }
+    .pagination button,
+    .pagination a,
+    .pagination .gap { min-width: 44px; height: 44px; }
+    /* max(16px, 1rem): below 16px iOS zooms the page when the field focuses. */
+    input, textarea, select { font-size: max(16px, 1rem); }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    select { min-height: 44px; }
+    input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+}
+
+@media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
+    /* Paddings sized for a phone, not a monitor. */
+    .hub-container { padding: calc(50px + env(safe-area-inset-top, 0px) + 2rem) 1rem 1.5rem; }
+    #app-root .hub-container,
+    .main-layout .hub-container { padding-top: 2rem; }
+    .hub-container header { margin-bottom: 2rem; }
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+        /* A 240px tile in a single column is mostly empty space. */
+        grid-auto-rows: minmax(150px, auto);
+        gap: 1rem;
+    }
+    .tile { padding: 1.5rem; }
+    .card { padding: 1rem; }
+    .center-shell {
+        padding: 1rem;
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    .center-card { padding: 2rem 1.25rem; }
+    .viewport { min-height: 240px; }
+
+    /* The rail as an off-canvas drawer. [drawer] is set by the sac-nav that
+       adopts the rail (its burger opens it), [open] while it is out. A rail
+       with no nav to open it keeps its inline place — a drawer nobody can
+       open would be worse than a narrow rail. */
+    .sidebar[drawer] {
+        position: fixed;
+        top: var(--drawer-top, calc(50px + env(safe-area-inset-top, 0px)));
+        bottom: 0;
+        left: 0;
+        width: var(--drawer-width);
+        height: auto;   /* beats .sidebar.fill: top + bottom size the drawer */
+        /* Above every floating window (10000–18999) and the open nav
+           (19000), under dialogs (20000). */
+        z-index: 19001;
+        padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+        translate: -105% 0;
+        visibility: hidden;
+        transition: translate 0.5s var(--ease-swift), visibility 0.5s;
+    }
+    /* translate: none while open, not 0 — any transform makes the drawer the
+       containing block of its position:fixed descendants (popovers). */
+    .sidebar[drawer][open] {
+        translate: none;
+        visibility: visible;
+    }
+}
+
+/* Narrow phones: a tile becomes a ROW — icon beside the text instead of
+   above it. The column tile spends most of its height on the 48px mark;
+   as a row the launcher shows twice the tiles per screen. */
+@media (max-width: 480px) {
+    .grid { grid-auto-rows: auto; gap: 0.75rem; }
+    .tile {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+    }
+    .tile > sac-icon {
+        --icon-size: 32px;
+        margin-bottom: 0;
+        flex: none;
+    }
+    .tile h2 { font-size: 1.15rem; }
+    .hub-container .intro-text { font-size: 1rem; }
+}

@@ -1,0 +1,15 @@
+/* Scoped to the app's own element — never :root, or the app would repaint
+   the desktop around it. Tokens only; the host's theme flows in. */
+app-my-dialog-app {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    height: 100%;
+}
+
+app-my-dialog-app h2 { font-size: 1.1rem; }
+app-my-dialog-app .lead { margin: 0; color: var(--text-muted); }
+app-my-dialog-app .readout { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+/* Pinned to the bottom: on a phone the window opens maximized, and the
+   bottom of the screen is where a thumb already is. */
+app-my-dialog-app .act { margin-top: auto; }

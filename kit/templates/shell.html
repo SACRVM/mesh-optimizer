@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover: the page runs under a phone's notch and home bar;
+         the kit pads its nav, layouts and scroll regions by the safe-area
+         insets, so nothing important ends up behind them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Browser chrome colour (a phone's status bar / tab strip). These two
+         values mirror the --bg seeds in kit/css/ui.css (dark / light) — the
+         one place a seed is repeated, because a meta tag cannot read a custom
+         property. A custom theme updates them together with its seeds. -->
+    <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+    <title>My Suite</title>
+    <!-- Adjust the path to wherever kit/ lives relative to this page. -->
+    <link rel="stylesheet" href="../kit/css/ui.css">
+
+    <!-- A shell hosts apps it does not know in advance, so the autoloader
+         earns its keep here. Cherry-pick instead if your app list is fixed. -->
+    <script defer src="../kit/js/all.js"></script>
+</head>
+<body class="app-page">
+    <!-- ONE hub, and the apps on it are COMPLETE: each draws its own chrome.
+         The shell owns only its home section — nav included — and the bare
+         stage. On stage, the host is present through context.host, rendered
+         by the app in its own nav. -->
+    <div class="app-stage" id="app-stage">
+        <!-- Shown at "#/", hidden while a view app is on stage. Its nav is
+             the HOME'S chrome, so it lives and dies with it. -->
+        <div id="app-home" class="app-home">
+            <!-- On a phone: the ribbon shows the name as text, the context
+                 slot stays, the burger panel lists the suite; opening it
+                 brings back the icons — the desktop brand row. -->
+            <sac-nav brand="MY SUITE" brand-icon="cube" brand-href="#/">
+                <div slot="context"><sac-theme-toggle></sac-theme-toggle></div>
+            </sac-nav>
+
+            <div class="orb"></div>
+            <div class="hub-container">
+                <header>
+                    <h1>MY SUITE</h1>
+                    <p class="intro-text">One line about the suite.</p>
+                </header>
+                <main class="grid">
+                    <!-- A view app is addressed by hash, so a plain link
+                         opens it — no click handler in the way. -->
+                    <a class="tile" href="#/notes">
+                        <sac-icon name="note"></sac-icon>
+                        <div>
+                            <h2>Notes</h2>
+                            <p>What it does, in one sentence.</p>
+                        </div>
+                    </a>
+                    <!-- A window app opens in place; [data-app] binds it.
+                         On a phone its window opens maximized. -->
+                    <a class="tile" href="?app=timer" data-app="timer">
+                        <sac-icon name="clock"></sac-icon>
+                        <div>
+                            <h2>Timer</h2>
+                            <p>Small tool, lives in a floating window.</p>
+                        </div>
+                    </a>
+                </main>
+            </div>
+            <sac-footer brand="MY SUITE" version="1.0.0"></sac-footer>
+        </div>
+        <!-- View apps are appended here by sac.apps. -->
+    </div>
+
+    <sac-command-palette></sac-command-palette>
+
+    <script defer>
+        // all.js injects its scripts, and injected scripts do not hold up
+        // DOMContentLoaded — boot on the autoloader's readiness signal. With
+        // cherry-picked <script defer> tags, DOMContentLoaded is fine.
+        function boot() {
+            // kind:"view" — the app takes over the stage, COMPLETE with its
+            // own chrome. Addressed at "#/<id>", listed in the nav panel
+            // automatically.
+            sac.apps.register({
+                id:          "notes",
+                name:        "Notes",
+                icon:        "note",
+                description: "What it does, in one or two sentences.",
+                kind:        "view",
+                tag:         "app-notes",
+                src:         "notes/app.js",
+                // accent:   "#10b981",   // optional per-app accent
+            });
+
+            // kind:"window" — floats above the shell.
+            sac.apps.register({
+                id:     "timer",
+                name:   "Timer",
+                icon:   "clock",
+                kind:   "window",
+                tag:    "app-timer",
+                src:    "timer/app.js",
+                width:  "420px",
+                height: "320px",
+            });
+
+            // viewHost: where view apps mount. home: shown while none is
+            // open. host: the package injected into every app's own chrome
+            // (context.host) — the jump home, the suite's navigation (the
+            // app's burger panel renders it) and the host's toolbar controls
+            // (the right end of the app's ribbon; entries take href OR
+            // onClick — a signed-in user chip goes here).
+            sac.apps.init({
+                viewHost: "#app-stage",
+                home:     "#app-home",
+                host: {
+                    name: "MY SUITE", icon: "cube", href: "#/",
+                    nav: sac.router.routes()
+                        .filter((r) => r.hash !== "#/")
+                        .map((r) => ({ label: r.label, href: r.hash, icon: r.icon })),
+                    // toolbar: [{ icon: "user", label: "Ada Lovelace", onClick: () => … }],
+                },
+            });
+        }
+
+        if (window.sacReady) boot();
+        else document.addEventListener("sac:ready", boot, { once: true });
+    </script>
+</body>
+</html>

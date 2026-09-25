@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.stackdump
+*.serve.log
+
+# Firepit + Claude Code — shared config versioned, runtime/personal local
+.firepit/inbox/
+.firepit/runs/
+.firepit/knowledge.db*
+!.firepit/config.json
+.claude/settings.local.json
+.claude/*.lock
+.claude/agent-memory/

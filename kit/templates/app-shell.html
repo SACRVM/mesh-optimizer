@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover: the page runs under a phone's notch and home bar;
+         the kit pads its nav, layouts and scroll regions by the safe-area
+         insets, so nothing important ends up behind them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Browser chrome colour (a phone's status bar / tab strip). These two
+         values mirror the --bg seeds in kit/css/ui.css (dark / light) — the
+         one place a seed is repeated, because a meta tag cannot read a custom
+         property. A custom theme updates them together with its seeds. -->
+    <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+    <title>My App</title>
+    <!-- Adjust the path to wherever kit/ lives relative to this page. -->
+    <link rel="stylesheet" href="../kit/css/ui.css">
+</head>
+<body>
+    <!-- lib (defer preserves order: globals → icons → router → scope → dialog) -->
+    <script defer src="../kit/js/lib/globals.js"></script>
+    <script defer src="../kit/js/lib/icons.js"></script>
+    <script defer src="../kit/js/lib/router.js"></script>
+    <script defer src="../kit/js/lib/scope.js"></script>   <!-- optional: scoped workspaces -->
+    <script defer src="../kit/js/lib/dialog.js"></script>
+    <script defer src="../kit/js/lib/hotkeys.js"></script>   <!-- keyboard shortcuts + the Ctrl-K palette -->
+    <script defer src="../kit/js/lib/color.js"></script>   <!-- required by the color components -->
+
+    <!-- vendor (only if help-loader / markdown is used) -->
+    <!-- <script defer src="../kit/js/vendor/marked.min.js"></script> -->
+    <!-- <script defer src="../kit/js/vendor/purify.min.js"></script> -->
+
+    <!-- components (only load what the app uses; order between them is free,
+         except sac-color-picker before sac-color-field — the field embeds it) -->
+    <script defer src="../kit/js/components/sac-icon.js"></script>
+    <script defer src="../kit/js/components/sac-nav.js"></script>
+    <script defer src="../kit/js/components/sac-footer.js"></script>
+    <script defer src="../kit/js/components/sac-window.js"></script>
+    <script defer src="../kit/js/components/sac-dialog.js"></script>
+    <script defer src="../kit/js/components/sac-status-banner.js"></script>
+    <script defer src="../kit/js/components/sac-split.js"></script>
+    <script defer src="../kit/js/components/sac-drop-zone.js"></script>
+    <script defer src="../kit/js/components/sac-tabs.js"></script>
+    <script defer src="../kit/js/components/sac-menu.js"></script>
+    <script defer src="../kit/js/components/sac-command-palette.js"></script>
+    <script defer src="../kit/js/components/sac-tooltip.js"></script>
+    <script defer src="../kit/js/components/sac-toast.js"></script>
+    <script defer src="../kit/js/components/sac-progress.js"></script>
+    <script defer src="../kit/js/components/sac-spinner.js"></script>
+    <script defer src="../kit/js/components/sac-avatar.js"></script>
+    <script defer src="../kit/js/components/sac-copy-button.js"></script>
+    <script defer src="../kit/js/components/sac-stepper.js"></script>
+    <script defer src="../kit/js/components/sac-color-picker.js"></script>
+    <script defer src="../kit/js/components/sac-color-field.js"></script>
+    <script defer src="../kit/js/components/sac-swatch-grid.js"></script>
+    <script defer src="../kit/js/components/sac-theme-toggle.js"></script>
+
+    <!-- views: each view script self-registers a route at load time.
+         Canonical view shape (light DOM! — views use global classes,
+         only kit components use Shadow DOM):
+
+         class MyHubView extends HTMLElement {
+             connectedCallback()    { this.render(); }
+             disconnectedCallback() { / * remove listeners here * / }
+             render() { this.innerHTML = `<div class="hub-container">…</div>`; }
+         }
+         customElements.define("my-hub-view", MyHubView);
+         sac.router.register("#/", "my-hub-view", { label: "Home", icon: "home" });
+    -->
+    <!-- <script defer src="views/my-hub-view.js"></script> -->
+
+    <!-- shell. On a phone the ribbon collapses the brand to its icon and the
+         burger panel lists the routes; a view whose markup has a
+         .main-layout with a .sidebar gets that rail as a drawer behind the
+         same burger. For list/detail views see list-detail.html. -->
+    <sac-nav brand="MY APP" brand-icon="cube"></sac-nav>
+    <div id="app-root"></div>
+
+    <!-- Ctrl-K palette: one tag, no config. It reads the router's routes and
+         anything registered on sac.commands. -->
+    <sac-command-palette></sac-command-palette>
+
+    <script defer>
+        window.addEventListener("DOMContentLoaded", () => {
+            // The router mounts views into #app-root. Views register
+            // themselves at script load time (defer preserves order above).
+            if (sac.router) sac.router.mount("#app-root");
+        });
+    </script>
+</body>
+</html>

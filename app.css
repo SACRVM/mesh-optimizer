@@ -1,0 +1,130 @@
+/* Mesh Optimizer — scoped to the app element, never :root (on a desktop that
+   would repaint the host around it). Tokens only; the merge-button colours are
+   the palette slots that match the P1 / P2 / V3 markers in the viewport. */
+
+app-mesh-optimizer {
+    display: block;
+    height: 100%;
+}
+body.app-page > app-mesh-optimizer { flex: 1; min-height: 0; }
+
+app-mesh-optimizer .mo-root { height: 100%; min-height: 0; }
+app-mesh-optimizer .mo-split { flex: 1; min-width: 0; min-height: 0; }
+app-mesh-optimizer .mo-panel:not([open]) { border-right: none; }
+app-mesh-optimizer .mo-viewport { width: 100%; height: 100%; min-height: 0; }
+
+app-mesh-optimizer .mo-note {
+    margin: 0;
+    font-size: 0.68rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+app-mesh-optimizer .mo-center { text-align: center; }
+app-mesh-optimizer .mo-modes svg { width: 16px; height: 16px; display: block; }
+app-mesh-optimizer .nav-icon-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
+/* ---- loose parts ---- */
+app-mesh-optimizer .mo-parts-summary { font-size: 0.72rem; line-height: 1.5; color: var(--text); }
+app-mesh-optimizer .mo-parts-actions { display: flex; flex-direction: column; gap: 6px; }
+app-mesh-optimizer .mo-parts-tiny {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+app-mesh-optimizer .mo-parts-tiny input { width: 56px; padding: 4px; text-align: center; }
+app-mesh-optimizer .mo-parts-tiny .btn { width: auto; margin-left: auto; padding: 4px 10px; }
+
+/* ---- viewport ---- */
+app-mesh-optimizer .mo-empty {
+    position: absolute;
+    inset: 0;
+    justify-content: center;
+    pointer-events: none;
+}
+app-mesh-optimizer .mo-viewport.has-mesh .mo-empty { display: none; }
+app-mesh-optimizer .mo-viewport.dragover {
+    outline: 2px dashed var(--accent);
+    outline-offset: -10px;
+}
+
+/* ---- scene graph window ---- */
+app-mesh-optimizer .mo-graph-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+app-mesh-optimizer #graph-sel-info {
+    flex: 1;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+app-mesh-optimizer .mo-graph-toolbar .btn { width: auto; padding: 4px 10px; }
+app-mesh-optimizer .mo-graph { display: block; padding: 10px; }
+app-mesh-optimizer .item-label { color: var(--text-muted); font-size: 0.75rem; }
+
+/* ---- transforms window ---- */
+app-mesh-optimizer .mo-transforms { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+app-mesh-optimizer .mo-transforms label { margin: 0; }
+app-mesh-optimizer .mo-tgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+app-mesh-optimizer .mo-tgrid span { display: block; font-size: 0.62rem; color: var(--text-muted); margin-bottom: 2px; }
+app-mesh-optimizer .mo-tgrid input,
+app-mesh-optimizer .mo-scale input { padding: 4px 6px; }
+app-mesh-optimizer .mo-scale { display: flex; align-items: center; gap: 6px; }
+app-mesh-optimizer .mo-scale input { flex: 1; min-width: 0; }
+app-mesh-optimizer .mo-scale .btn { width: auto; padding: 4px 8px; }
+
+app-mesh-optimizer .mo-help { padding: 16px; font-size: 0.85rem; line-height: 1.6; }
+app-mesh-optimizer .mo-help h3 { color: var(--accent-text); margin: 0.8em 0 0.3em; }
+app-mesh-optimizer .mo-help h3:first-child { margin-top: 0; }
+
+/* ---- the in-viewport context menu (built by the engine) ----
+   Fixed: the engine places it at the click's client coordinates. */
+app-mesh-optimizer .floating-menu { position: fixed; }
+app-mesh-optimizer .merge-btn-group { display: flex; gap: 4px; }
+app-mesh-optimizer .merge-btn {
+    flex: 1;
+    height: 34px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--fg) 5%, transparent);
+    color: var(--text);
+    font-weight: 700;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+app-mesh-optimizer .merge-btn:hover { background: var(--hover); transform: translateY(-1px); }
+app-mesh-optimizer .merge-btn.p1 { border-color: var(--palette-blue); color: var(--palette-blue); }
+app-mesh-optimizer .merge-btn.p2 { border-color: var(--palette-green); color: var(--palette-green); }
+app-mesh-optimizer .merge-btn.v3 { border-color: var(--palette-purple); color: var(--palette-purple); }
+app-mesh-optimizer .merge-btn.center { border-color: var(--text); color: var(--text); }
+app-mesh-optimizer .floating-menu .btn-delete {
+    background: var(--danger-fill);
+    color: var(--on-danger);
+    border-color: transparent;
+}
+app-mesh-optimizer .floating-menu .btn-dissolve {
+    background: color-mix(in srgb, var(--palette-indigo) 25%, transparent);
+    border-color: var(--palette-indigo);
+}
+app-mesh-optimizer .sliver-warning {
+    color: var(--danger-text);
+    font-size: 0.6rem;
+    margin-left: 4px;
+    font-weight: 800;
+}
+app-mesh-optimizer .btn-cancel {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+    text-align: center;
+    cursor: pointer;
+}
+app-mesh-optimizer .btn-cancel:hover { color: var(--text); }

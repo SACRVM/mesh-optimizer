@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover: the page runs under a phone's notch and home bar;
+         the kit pads its nav, layouts and scroll regions by the safe-area
+         insets, so nothing important ends up behind them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Browser chrome colour (a phone's status bar / tab strip). These two
+         values mirror the --bg seeds in kit/css/ui.css (dark / light) — the
+         one place a seed is repeated, because a meta tag cannot read a custom
+         property. A custom theme updates them together with its seeds. -->
+    <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+    <title>My Dialog App</title>
+
+    <!-- The harness: your app alone, no desktop, F5 to develop.
+         Vendored and autark: your app repo keeps its OWN copy of kit/ (the
+         primary model) — no CDN, works fully offline, and you upgrade when you
+         choose. When a real desktop hosts you instead, IT provides the kit and
+         you drop these two lines. -->
+    <link rel="stylesheet" href="kit/css/ui.css">
+    <script defer src="kit/js/all.js"></script>
+
+    <script defer>
+        // The app is injected AFTER the kit — exactly what a desktop does
+        // before it opens you. (all.js injects its scripts, and injected
+        // scripts do not hold up DOMContentLoaded, so a plain
+        // <script defer src="app.js"> would run too early and find no sac.)
+        function loadApp() {
+            const s = document.createElement("script");
+            s.src = "app.js";
+            document.head.appendChild(s);
+        }
+        if (window.sacReady) loadApp();
+        else document.addEventListener("sac:ready", loadApp, { once: true });
+    </script>
+
+    <style>
+        /* Harness only — not part of the app. */
+        body { padding: clamp(1rem, 5vw, 2rem); }
+        .frame {
+            max-width: 420px;
+            min-height: 360px;
+            padding: 1rem;
+            display: flex;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-l);
+        }
+        /* height: auto lets the app stretch to the frame; its own
+           height: 100% is for the definite box a <sac-window> gives it. */
+        .frame > * { flex: 1; height: auto; }
+        /* On a phone a desktop opens every window maximized below its nav,
+           so the harness does the same: the frame becomes the whole screen.
+           Develop at 360px wide as well as at your manifest's size. */
+        @media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
+            body { padding: 0; }
+            .frame {
+                max-width: none;
+                min-height: 100vh;
+                min-height: 100dvh;
+                padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+                border: none;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Roughly the box a <sac-window> would give it on a desktop. With no
+         host calling mount(), sac.app.Element mounts the app itself. -->
+    <div class="frame"><app-my-dialog-app></app-my-dialog-app></div>
+</body>
+</html>

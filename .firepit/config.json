@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "mesh-optimizer",
+  "commands": [
+    { "name": "Serve", "type": "Shell", "icon": "🚀", "command": "cmd",
+      "args": ["/c", "npx", "serve", ".", "-l", "3343"],
+      "window": "reuse:serve", "longRunning": true },
+    { "name": "Open", "type": "Url", "icon": "🧊", "url": "http://localhost:3343/" },
+    { "name": "GitHub", "type": "Url", "icon": "🐙", "url": "https://github.com/SACRVM/mesh-optimizer" }
+  ]
+}

@@ -1,0 +1,70 @@
+# mesh-optimizer
+
+Mesh cleanup and simplification as an app built on
+[SACRVM APPKIT](https://github.com/SACRVM/sacrvm-appkit). It started as the
+Mesh Prep Tool of DREAM TOOLS and was taken out as an app of its own; the
+3D-game-specific parts stayed behind (the "TO WORLD" hand-off). The former
+"In-Game View" lives on as the generic **Single-sided view** (backface
+culling shows wrongly wound faces as holes).
+
+## The shape
+
+**One repo, one app** — `app.json`, `app.js`, `app.css`, `index.html`,
+vendored `kit/` — plus one extra file:
+
+- `app.js` — the custom element (classic script): markup from kit
+  components only, open / save through `context.files`, drop target,
+  visibility, lifecycle.
+- `engine.js` — the tool itself, an ES module that `app.js` imports on
+  mount: half-edge mesh, adaptive QEM + meshoptimizer simplification, loose
+  parts, repair, face/edge/vertex editing, the Three.js viewport.
+  `start(root, { isVisible, saveFile })` → `{ app, openFile, dispose }`.
+
+Rules that keep it working on a desktop page:
+
+- **Every DOM lookup is scoped to the app element** (`$id()` = `ROOT.querySelector`).
+  Never `document.getElementById` — another app on the same page may use the
+  same ids. Scene-graph rows carry an `mo-` id prefix for the same reason.
+- **No importmap.** A host page has none, so Three.js and meshoptimizer are
+  imported by full jsDelivr URL. Three addons MUST use the `/+esm` form
+  (`…/examples/jsm/<path>.js/+esm`): jsDelivr rewrites their bare `'three'`
+  import to `/npm/three@0.170.0/+esm`, which is the same module as the main
+  import — one Three instance. Mixing in a plain `three.module.js` URL gives
+  two instances and breaks `instanceof`.
+- **Keys and rendering only while on screen** (`IS_VISIBLE()`, fed by an
+  IntersectionObserver): the render loop idles and the keydown handler returns
+  while the view is hidden.
+- **Kit events:** `sac:change` / `sac:input` with `e.detail.value`; the scene
+  graph speaks `sac:select`, `sac:expand`, `sac:visibility`, `sac:recolor`,
+  `sac:delete`.
+- **No build step, ever. The kit is vendored** (autark): `kit/` is the
+  release ZIP's copy, verbatim, never edited here. Tokens only — no raw colours.
+
+**Language:** chat in German, code/docs/commits in English.
+
+## Firepit inbox
+
+At the start of a session, read any pending messages in `.firepit/inbox/*.md` — cross-project notes Firepit routes here. Act on each, then mark it done with the `firepit_inbox_complete` MCP tool, passing the message's filename as the `id`.
+
+## Firepit knowledge
+
+Before researching something that may already be known, query the knowledge base with the `firepit_knowledge_search` MCP tool (scope `both` covers this project plus the global base). Save durable findings with `firepit_knowledge_add` — written in English, per the indexing convention. The created markdown files live under `.firepit/knowledge/` and are committed like any other file.
+
+## Firepit pinned knowledge
+
+@.firepit/knowledge-pinned.md
+
+The import above auto-loads the knowledge docs marked `pin: true` in their frontmatter — always-on rules that apply every session without a search. Firepit regenerates the file from the pinned docs; don't edit it directly. Pin/unpin via the pinned flag on `firepit_knowledge_add` / `firepit_knowledge_update`, and keep the pinned set small — everything else stays reachable through `firepit_knowledge_search`.
+
+## Firepit artifacts
+
+When you produce a file the user will want to open — a report, screenshot, diagram, generated image, log excerpt, build output, or an executable you built for them to run — pin it with the `firepit_artifact_add` MCP tool so it appears in the project's paperclip pane. Do this as you produce it, not at the end of the session; a path buried in scrollback is a path the user has to hunt for. Pinning only links the file — it stays where it is, and `firepit_artifact_remove` never deletes it. Check `firepit_artifact_list` first so you update an existing entry instead of piling up near-duplicates, and unpin what has gone stale.
+
+## Firepit conventions
+
+<!-- claude-firepit-fragments -->
+
+@../.firepit/projects/claude.md
+@../.firepit/projects/claude-github-public.md
+
+The two imports above are shared files in the Firepit central repo — edit them there and every project follows. They carry policy; the tools themselves are described by Firepit's MCP server at the handshake, so nothing is duplicated between the two.
