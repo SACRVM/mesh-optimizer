@@ -27,6 +27,8 @@ npx serve .
   colours, a single-sided view that shows wrongly wound faces as holes, a
   movable key light; live face / vertex / open-edge / sliver counts.
 - **Transforms:** rotate, move and uniformly scale objects before processing.
+- **Remembers** your view and optimization settings; Ctrl+O opens, Ctrl+S saves
+  the OBJ. Every save asks where the file goes.
 
 ## Install on a desktop
 

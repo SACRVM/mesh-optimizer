@@ -40,6 +40,29 @@ Rules that keep it working on a desktop page:
 - **No build step, ever. The kit is vendored** (autark): `kit/` is the
   release ZIP's copy, verbatim, never edited here. Tokens only — no raw colours.
 
+## UI conventions
+
+Shared by the four apps that came out of DREAM TOOLS (vectorizer,
+background-remover, mesh-optimizer, svg-to-3d) — keep them in step.
+
+1. **Toolbar order:** Open (`btn`, `folder` icon, not primary) · the main
+   export (`btn primary`, `download` icon, the format as label) · further
+   formats in a `sac-menu` "More ▾" · Copy where it applies (`nav-icon-btn`)
+   · the app's own icon buttons · Credits (`copyright`) · Help (`info`).
+2. **Exports always ask** where to save — no silent overwrite of an earlier
+   file.
+3. **Credits** open `sac.about` with the manifest's `notices` — every
+   third-party licence is reachable from the UI.
+4. **The empty state is a `sac-drop-zone`**; its click / Enter goes through
+   `context.files.open`, never the device picker directly.
+5. **Settings are remembered:** controls marked `data-keep` are stored in
+   `context.fs` ("settings") and restored by replaying their kit event.
+6. **Ctrl+O / Ctrl+S** (open / main export) through `sac.hotkeys`, only
+   while the app is on screen.
+7. **No prose on the UI.** Panels, windows and empty states carry controls,
+   short labels and data readouts only; every explanation lives in the Help
+   window.
+
 **Language:** chat in German, code/docs/commits in English.
 
 ## Firepit inbox

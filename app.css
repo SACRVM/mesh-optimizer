@@ -13,13 +13,11 @@ app-mesh-optimizer .mo-split { flex: 1; min-width: 0; min-height: 0; }
 app-mesh-optimizer .mo-panel:not([open]) { border-right: none; }
 app-mesh-optimizer .mo-viewport { width: 100%; height: 100%; min-height: 0; }
 
-app-mesh-optimizer .mo-note {
-    margin: 0;
+app-mesh-optimizer .mo-readout {
     font-size: 0.68rem;
-    line-height: 1.5;
     color: var(--text-muted);
+    text-align: center;
 }
-app-mesh-optimizer .mo-center { text-align: center; }
 app-mesh-optimizer .mo-modes svg { width: 16px; height: 16px; display: block; }
 app-mesh-optimizer .nav-icon-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 
@@ -37,11 +35,19 @@ app-mesh-optimizer .mo-parts-tiny input { width: 56px; padding: 4px; text-align:
 app-mesh-optimizer .mo-parts-tiny .btn { width: auto; margin-left: auto; padding: 4px 10px; }
 
 /* ---- viewport ---- */
-app-mesh-optimizer .mo-empty {
+/* The empty state is a drop zone; its click goes through context.files. */
+app-mesh-optimizer .app-drop {
     position: absolute;
     inset: 0;
+    display: flex;
+    align-items: center;
     justify-content: center;
+    padding: 24px;
     pointer-events: none;
+}
+app-mesh-optimizer .app-drop sac-drop-zone {
+    width: min(320px, 100%);
+    pointer-events: auto;
 }
 app-mesh-optimizer .mo-viewport.has-mesh .mo-empty { display: none; }
 app-mesh-optimizer .mo-viewport.dragover {
