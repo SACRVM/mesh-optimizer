@@ -33,6 +33,17 @@ class SacSpinner extends HTMLElement {
         if (!this.shadowRoot.firstChild) this._render();
         this.setAttribute("role", "status");
         this._sync();
+        // Runtime language switch: the default label follows in place.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Kit strings in the current language (an app label stays as given). */
+    _relabel() {
+        this._sync();
     }
 
     attributeChangedCallback() {

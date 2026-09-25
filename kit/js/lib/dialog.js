@@ -16,7 +16,7 @@
  *   await sac.dialog.info({
  *       title:   "About",
  *       message: ["First paragraph.", "Second paragraph."],   // or one string
- *       label:   "Got it",                                    // default "OK"
+ *       label:   "Got it",                                    // default: sac.t("dialog.ok", "OK")
  *   });
  *
  * `message` is one string or an array of strings — each becomes its own
@@ -73,7 +73,11 @@
             return this.confirm({
                 title,
                 message,
-                buttons: [{ action: "ok", label: label || "OK", kind: "primary" }],
+                // The kit's own "OK" carries its key, so an open info
+                // dialog follows a language switch; a caller's label is theirs.
+                buttons: [label
+                    ? { action: "ok", label, kind: "primary" }
+                    : { action: "ok", label: "OK", labelKey: "dialog.ok", kind: "primary" }],
             });
         },
     };

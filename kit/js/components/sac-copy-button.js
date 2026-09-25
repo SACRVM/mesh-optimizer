@@ -58,10 +58,18 @@ class SacCopyButton extends HTMLElement {
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
         else this._syncLabel();
+        // Runtime language switch: the default label follows in place.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
         clearTimeout(this._stateTimer);
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Kit strings in the current language (an app label stays as given). */
+    _relabel() {
+        this._syncLabel();
     }
 
     attributeChangedCallback(name) {

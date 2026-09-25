@@ -1,8 +1,9 @@
 /**
  * <sac-slider label="Depth" min="0" max="100" step="1" value="50" suffix="px">
  * <sac-slider label="Quality" min="0" max="2" step="1" value="1" labels="Low,Medium,High">
+ * <sac-slider label="Smoothing" min="0.01" max="4" step="0.01" value="1" ends="Crisp,Smooth">
  *
- * Range slider with live value display. ALL seven attributes are observed.
+ * Range slider with live value display. ALL attributes are observed.
  *
  * IMPORTANT implementation constraint: attribute changes update the shadow
  * DOM IN PLACE — never re-render it. Re-rendering replaces the <input>
@@ -12,6 +13,10 @@
  * Attributes:
  *   label, min, max, step, value, suffix,
  *   labels   — comma-separated texts mapped by integer value (discrete steps).
+ *   ends     — "Low end,High end": two captions under the track's ends, for a
+ *              continuous range whose extremes need words ("Crisp,Smooth").
+ *              The readout still shows the number. Translate it like `label`
+ *              (the app sets the attribute again on a language switch).
  *   disabled — presence = inert + dimmed, fires nothing.
  *
  * Properties:
@@ -29,7 +34,7 @@
  *   sac:change — fired on release;     detail.value = string.
  */
 class SacSlider extends HTMLElement {
-    static get observedAttributes() { return ["label", "min", "max", "step", "value", "suffix", "labels", "disabled"]; }
+    static get observedAttributes() { return ["label", "min", "max", "step", "value", "suffix", "labels", "ends", "disabled"]; }
 
     constructor() {
         super();
@@ -92,7 +97,19 @@ class SacSlider extends HTMLElement {
         input.max  = this.getAttribute("max")  || "100";
         input.step = this.getAttribute("step") || "1";
         if (label) label.textContent = this.getAttribute("label") || "";
+        this._syncEnds();
         this._syncValue();
+    }
+
+    /** The two end captions, in place; the row is hidden without `ends`. */
+    _syncEnds() {
+        const row = this.shadowRoot.querySelector(".ends");
+        if (!row) return;
+        const raw = this.getAttribute("ends");
+        const parts = raw ? raw.split(",").map(s => s.trim()) : [];
+        row.hidden = !parts.some(Boolean);
+        row.children[0].textContent = parts[0] || "";
+        row.children[1].textContent = parts[1] || "";
     }
 
     render() {
@@ -137,6 +154,15 @@ class SacSlider extends HTMLElement {
                     cursor: pointer;
                     border: none;
                 }
+                .ends {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 0.5rem;
+                    margin-top: 0.25rem;
+                    font-size: 0.7rem;
+                    color: var(--text-muted);
+                }
+                .ends[hidden] { display: none; }
                 :host([disabled]) { opacity: .5; }
                 :host([disabled]) input[type="range"] { cursor: not-allowed; }
 
@@ -174,7 +200,9 @@ class SacSlider extends HTMLElement {
                 <span class="val">${this._display(value)}</span>
             </div>
             <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${this.disabled ? "disabled" : ""}/>
+            <div class="ends" part="ends" hidden><span></span><span></span></div>
         `;
+        this._syncEnds();
     }
 
     attach() {

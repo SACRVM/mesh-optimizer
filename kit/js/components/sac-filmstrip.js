@@ -77,6 +77,11 @@
  * inside a container that already pads.
  */
 (function () {
+    /** Kit i18n: sac.t when globals.js is loaded, the English fallback when
+     *  the component runs standalone. */
+    const t = (key, fallback) =>
+        (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
     const ICON_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
 
     /** Draw any supported frame source into `canvas` at native size. `onLate` fires when a URL loads. */
@@ -127,9 +132,33 @@
         connectedCallback() {
             if (!this.shadowRoot.firstChild) this._render();
             this._syncSortable();
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
         }
         disconnectedCallback() {
             if (this._sortable) { this._sortable.destroy(); this._sortable = null; }
+            if (this._offLang) { this._offLang(); this._offLang = null; }
+        }
+
+        /** Kit strings onto the existing nodes: the strip's name (unless the
+         *  app set `label`) and the three action buttons. */
+        _labels() {
+            this._strip.setAttribute("aria-label", this.getAttribute("label") || t("filmstrip.frames", "Frames"));
+            const act = (action, text) => {
+                const b = this._actions.querySelector(`[data-action="${action}"]`);
+                b.title = text;
+                b.setAttribute("aria-label", text);
+            };
+            act("add",       t("filmstrip.add", "Add frame"));
+            act("duplicate", t("filmstrip.duplicate", "Duplicate frame"));
+            act("delete",    t("filmstrip.delete", "Delete frame"));
+        }
+
+        /** Runtime language switch: labels in place — frames, thumbnails,
+         *  the active frame and the strip's scroll are untouched. */
+        _relabel() {
+            if (!this._strip) return;
+            this._labels();
+            this._applyActive(false);
         }
 
         attributeChangedCallback(name) {
@@ -138,7 +167,7 @@
             else if (name === "thumb-size" || name === "pixelated") this.refresh();
             else if (name === "actions") this._syncActions();
             else if (name === "reorderable") this._syncSortable();
-            else if (name === "label") this._strip.setAttribute("aria-label", this.getAttribute("label") || "Frames");
+            else if (name === "label") this._labels();
         }
 
         get frames() { return this._frames.slice(); }
@@ -305,14 +334,14 @@
                     <slot name="controls"></slot>
                     <div class="strip" role="listbox" aria-orientation="horizontal"></div>
                     <div class="actions" hidden>
-                        <button class="act" data-action="add" type="button" title="Add frame" aria-label="Add frame"></button>
-                        <button class="act" data-action="duplicate" type="button" title="Duplicate frame" aria-label="Duplicate frame"></button>
-                        <button class="act danger" data-action="delete" type="button" title="Delete frame" aria-label="Delete frame"></button>
+                        <button class="act" data-action="add" type="button"></button>
+                        <button class="act" data-action="duplicate" type="button"></button>
+                        <button class="act danger" data-action="delete" type="button"></button>
                     </div>
                 </div>`;
             this._strip = this.shadowRoot.querySelector(".strip");
             this._actions = this.shadowRoot.querySelector(".actions");
-            this._strip.setAttribute("aria-label", this.getAttribute("label") || "Frames");
+            this._labels();
             // Icons straight from the registry — a <sac-icon> would work too,
             // but the buttons must render even before sac-icon.js is defined.
             const icon = (n) => {
@@ -369,7 +398,8 @@
                 const on = i === act;
                 c.classList.toggle("active", on);
                 c.setAttribute("aria-selected", on ? "true" : "false");
-                c.setAttribute("aria-label", `Frame ${i + 1} of ${n}`);
+                c.setAttribute("aria-label", t("filmstrip.frame", "Frame {i} of {n}")
+                    .replace("{i}", i + 1).replace("{n}", n));
                 c.querySelector(".cap").textContent = String(i + 1);
                 c.tabIndex = on ? 0 : -1;
             });

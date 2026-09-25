@@ -4,6 +4,10 @@
  * SPA use:
  *   sac.router.register("#/notes", "my-notes-view", { label: "Notes", icon: "note" });
  *   sac.router.mount("#app-root");
+ *   // options.palette: the Ctrl-K palette group the route lists under — a
+ *   // string, or a function returning one (resolved on every open, so it can
+ *   // follow the language); false keeps the route out of the palette.
+ *   // Default: "Views".
  *   // On hashchange the mount point's innerHTML is swapped to the matching
  *   // tag — views are custom elements; connectedCallback is the lifecycle
  *   // hook and disconnectedCallback is where listeners get removed.
@@ -20,7 +24,7 @@
  */
 (function () {
     if (!window.sac) { console.warn("[sac.router] globals.js must load first — router unavailable."); return; }
-    const routes = new Map();    // "#/notes" → { tag, label, icon }
+    const routes = new Map();    // "#/notes" → { tag, label, icon, palette }
     let rootElement = null;
 
     function currentHash() {
@@ -49,7 +53,8 @@
             routes.set(hash, {
                 tag: tagName || null,
                 label: options.label || tagName || hash,
-                icon:  options.icon  || null
+                icon:  options.icon  || null,
+                palette: options.palette === undefined ? null : options.palette,
             });
             // Notify listeners (e.g. <sac-nav>) that the route table changed.
             // Needed because nav components are instantiated before view

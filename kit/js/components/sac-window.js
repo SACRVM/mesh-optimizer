@@ -147,9 +147,11 @@ class SacWindow extends HTMLElement {
         this._mq.addEventListener('change', this._onCompactChange);
         this._syncCompact();
         if (this.hasAttribute('open')) this._fitIntoView();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         window.removeEventListener('resize', this._onViewportResize);
         this._mq.removeEventListener('change', this._onCompactChange);
         // Drop any in-flight drag/resize listeners on document.
@@ -866,6 +868,20 @@ class SacWindow extends HTMLElement {
         if (Math.round(top) !== Math.round(rect.top)) {
             this.style.top = `${Math.round(top)}px`;
             this.style.bottom = '';
+        }
+    }
+
+    /** Language switch: control labels only — geometry, state, z-order and
+     *  a running drag are untouched. */
+    _relabel() {
+        this._updateControls();
+        const titleText = this.shadowRoot.getElementById('window-title-text');
+        if (titleText && !this.getAttribute('title')) titleText.textContent = t('window.default-title', 'Window');
+        const closeBtn = this.shadowRoot.getElementById('window-close-btn');
+        if (closeBtn) {
+            const label = t('window.close', 'Close');
+            closeBtn.setAttribute('aria-label', label);
+            closeBtn.setAttribute('title', label);
         }
     }
 

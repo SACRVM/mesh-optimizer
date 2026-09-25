@@ -60,9 +60,20 @@
  * the two-column layout collapses to one. The close button reaches 44 × 44
  * under (pointer: coarse).
  *
+ * Language: the kit's own strings (title default, "General", the empty
+ * state, the close label, bind()'s description + group) go through sac.t;
+ * an open sheet re-fills in place on a runtime switch (scroll kept), and
+ * key-cap names follow it through sac.hotkeys.format().
+ *
  * Theming: tokens only — the <sac-dialog> glass, kbd chips in the ui.css kbd
  * recipe (re-stated here: document styles do not pierce the shadow root).
  */
+/** Kit i18n: sac.t when globals.js is loaded, the English fallback when the
+ *  component runs standalone. (A unique top-level name: this file is not
+ *  wrapped in a closure.) */
+const sacShortcutT = (key, fallback) =>
+    (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
 class SacShortcutSheet extends HTMLElement {
     constructor() {
         super();
@@ -75,6 +86,25 @@ class SacShortcutSheet extends HTMLElement {
 
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Runtime language switch: title, close label and — while open — the
+     *  list itself (group names, descriptions, key caps), in place. */
+    _relabel() {
+        const sr = this.shadowRoot;
+        if (!sr.firstChild) return;
+        sr.getElementById("ss-title").textContent = this._title();
+        sr.querySelector(".close").setAttribute("aria-label", sacShortcutT("shortcuts.close", "Close"));
+        if (!this.hasAttribute("open")) return;
+        const body = sr.querySelector(".body");
+        const scroll = body.scrollTop;
+        this._fill();
+        body.scrollTop = scroll;
     }
 
     attributeChangedCallback() {
@@ -111,7 +141,7 @@ class SacShortcutSheet extends HTMLElement {
 
     toggle() { if (this.hasAttribute("open")) this.close(); else this.open(); }
 
-    _title() { return this.getAttribute("title") || "Keyboard shortcuts"; }
+    _title() { return this.getAttribute("title") || sacShortcutT("shortcuts.title", "Keyboard shortcuts"); }
 
     _onKeydown(e) {
         if (e.key === "Escape") {
@@ -150,7 +180,8 @@ class SacShortcutSheet extends HTMLElement {
     }
 
     _groups() {
-        const GENERAL = "General";
+        // The ungrouped bucket, spelled in the current language.
+        const GENERAL = sacShortcutT("shortcuts.general", "General");
         const order = [];
         const map = new Map();
         const put = (group, chips, description) => {
@@ -178,7 +209,7 @@ class SacShortcutSheet extends HTMLElement {
         if (!groups.length) {
             const p = document.createElement("p");
             p.className = "empty";
-            p.textContent = "No keyboard shortcuts are registered.";
+            p.textContent = sacShortcutT("shortcuts.empty", "No keyboard shortcuts are registered.");
             body.appendChild(p);
             return;
         }
@@ -380,12 +411,13 @@ class SacShortcutSheet extends HTMLElement {
             <div class="panel" part="panel" role="dialog" aria-modal="true" aria-labelledby="ss-title">
                 <div class="head">
                     <h2 class="title" id="ss-title"></h2>
-                    <button class="close" type="button" aria-label="Close"><sac-icon name="close"></sac-icon></button>
+                    <button class="close" type="button"><sac-icon name="close"></sac-icon></button>
                 </div>
                 <div class="body" tabindex="0"></div>
             </div>
         `;
         this.shadowRoot.getElementById("ss-title").textContent = this._title();
+        this.shadowRoot.querySelector(".close").setAttribute("aria-label", sacShortcutT("shortcuts.close", "Close"));
         this.shadowRoot.querySelector(".backdrop").addEventListener("click", () => this.close());
         this.shadowRoot.querySelector(".close").addEventListener("click", () => this.close());
     }
@@ -439,8 +471,10 @@ customElements.define("sac-shortcut-sheet", SacShortcutSheet);
         },
         bind(combo = "shift+?", opts = {}) {
             if (!sac.hotkeys) { console.warn("[sac.shortcuts] bind: hotkeys.js is not loaded."); return function () {}; }
+            // Functions: listings resolve them in the current language.
             return sac.hotkeys.register(combo, () => sac.shortcuts.toggle(opts), {
-                description: "Keyboard shortcuts", group: "Help",
+                description: () => sacShortcutT("shortcuts.title", "Keyboard shortcuts"),
+                group:       () => sacShortcutT("shortcuts.help", "Help"),
             });
         },
     };

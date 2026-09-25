@@ -92,10 +92,20 @@ class SacStepper extends HTMLElement {
             this._attach();
         }
         this._syncAll();
+        // Runtime language switch: relabel the ± buttons in place.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
         this._clearHold();
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Kit strings in the current language, on the existing buttons. */
+    _relabel() {
+        if (!this._minusBtn || !this._plusBtn) return;
+        this._minusBtn.setAttribute("aria-label", t("stepper.decrease", "Decrease"));
+        this._plusBtn.setAttribute("aria-label", t("stepper.increase", "Increase"));
     }
 
     attributeChangedCallback(name) {

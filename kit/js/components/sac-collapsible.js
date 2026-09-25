@@ -67,12 +67,17 @@ class SacCollapsible extends HTMLElement {
         this._ro = new ResizeObserver(() => this._measure());
         this._ro.observe(this._content);
         this._measure();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
         this._ro?.disconnect();
         this._ro = null;
+        if (this._offLang) { this._offLang(); this._offLang = null; }
     }
+
+    /** Language switch: the more/less tab text, in place (state untouched). */
+    _relabel() { this._apply(); }
 
     attributeChangedCallback(name) {
         if (!this._content) return;

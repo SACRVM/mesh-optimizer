@@ -32,6 +32,7 @@
     const files = [
         // lib — globals first, then the rest in dependency order
         "lib/globals.js",
+        "i18n/de.js",      // the kit's own strings in German (sac.lang)
         "lib/icons.js",
         "lib/router.js",
         "lib/scope.js",
@@ -92,6 +93,7 @@
         "components/sac-progress.js",
         "components/sac-spinner.js",
         "components/sac-theme-toggle.js",
+        "components/sac-lang-toggle.js",
         "components/sac-launcher.js",
 
         // pixel workbench — sac-toolbox after sac-tooltip (it attaches

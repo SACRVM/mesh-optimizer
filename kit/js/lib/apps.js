@@ -190,6 +190,10 @@
  *           save(data, opts),      // them (device by default, the desktop's
  *           kind,                  // space when it installed one). Null when
  *       },                         // the host loaded no files lib
+ *       lang: {                    // the page's language (globals.js) —
+ *           get(),                 // "en", "de", … READ-ONLY: the host owns
+ *           onChange(cb),          // the switch, like the theme; re-render
+ *       },                         // your strings (sac.t) in the callback
  *       setDirty(flag),            // true = unsaved work: leaving the page asks
  *                                  // first, sac.apps.isDirty(id) tells a host,
  *                                  // document gets sac:dirty { id, dirty }.
@@ -372,6 +376,12 @@
             // The user's files (kit/js/lib/files.js): Open… / Save as… wherever
             // the host keeps them. Null when the host loaded no files lib.
             files: window.sac.files ? sac.files.forApp() : null,
+            // The page's language (globals.js): read-only for apps — the
+            // host owns the switch, like the theme. Re-render on onChange.
+            lang: window.sac.lang ? {
+                get: () => sac.lang.get(),
+                onChange: (cb) => sac.lang.onChange(cb),
+            } : null,
             // "I hold work that is not saved." The host warns before the page
             // goes away and can ask before removing the app; see isDirty().
             setDirty(flag) { setDirty(id, flag); },
@@ -453,11 +463,16 @@
         registry.set(manifest.id, Object.assign({}, manifest));
 
         // A view is a destination, so it belongs in the nav panel — one
-        // registration, both renderings. `nav: false` opts out.
+        // registration, both renderings. `nav: false` opts out. In the Ctrl-K
+        // palette it lists under "Apps", not "Views": users don't care whether
+        // an app is a view or a window (a host lists its window apps under the
+        // same group). `palette: false` keeps it out of the palette.
         if (manifest.kind === "view" && manifest.nav !== false && window.sac.router) {
             sac.router.register(`#/${manifest.id}`, null, {
                 label: displayName(manifest),
                 icon:  manifest.icon || null,
+                palette: manifest.palette === false ? false
+                    : () => sac.t("palette.group-apps", "Apps"),
             });
         }
         emitChanged(manifest.id, "register");

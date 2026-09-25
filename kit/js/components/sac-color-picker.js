@@ -82,6 +82,22 @@
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+    /** Kit-labelled elements: id → [key, English]. The aria-labels, set at
+     *  render and again on a language switch. */
+    const LABELS = {
+        "root":        ["color-picker.title", "Color picker"],
+        "sv-thumb":    ["color-picker.saturation-value", "Saturation and value"],
+        "hue-thumb":   ["color-picker.hue", "Hue"],
+        "alpha-thumb": ["color-picker.opacity", "Opacity"],
+        "r-range":     ["color-picker.red", "Red"],
+        "r-num":       ["color-picker.red", "Red"],
+        "g-range":     ["color-picker.green", "Green"],
+        "g-num":       ["color-picker.green", "Green"],
+        "b-range":     ["color-picker.blue", "Blue"],
+        "b-num":       ["color-picker.blue", "Blue"],
+        "hex":         ["color-picker.hex-color", "Hex color"],
+    };
+
     /** Fallback when no (valid) value attribute is given. Data, not theme. */
     const DEFAULT_VALUE = "#3b82f6";
 
@@ -121,6 +137,22 @@
             this._ready = true;
             this._reflect();
             this._syncAll();
+            // Runtime language switch: relabel in place — drags, typing and
+            // focus are untouched.
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+        }
+
+        disconnectedCallback() {
+            if (this._offLang) { this._offLang(); this._offLang = null; }
+        }
+
+        /** aria-labels + the SV value text in the current language. */
+        _relabel() {
+            for (const id in LABELS) {
+                const el = this.shadowRoot.getElementById(id);
+                if (el) el.setAttribute("aria-label", t(LABELS[id][0], LABELS[id][1]));
+            }
+            if (this._ready) this._syncThumbs();
         }
 
         attributeChangedCallback(name) {
@@ -478,16 +510,8 @@
         _render() {
             // Kit strings for the attribute positions of the template below.
             const esc = (s) => String(s).replace(/"/g, "&quot;");
-            const L = {
-                title:   esc(t("color-picker.title", "Color picker")),
-                sv:      esc(t("color-picker.saturation-value", "Saturation and value")),
-                hue:     esc(t("color-picker.hue", "Hue")),
-                opacity: esc(t("color-picker.opacity", "Opacity")),
-                red:     esc(t("color-picker.red", "Red")),
-                green:   esc(t("color-picker.green", "Green")),
-                blue:    esc(t("color-picker.blue", "Blue")),
-                hex:     esc(t("color-picker.hex-color", "Hex color")),
-            };
+            const L = {};
+            for (const id in LABELS) L[id] = esc(t(LABELS[id][0], LABELS[id][1]));
             this.shadowRoot.innerHTML = `
                 <style>
                     :host {
@@ -786,45 +810,45 @@
                         .hex { transition: none; }
                     }
                 </style>
-                <div class="root" id="root" role="group" aria-label="${L.title}">
+                <div class="root" id="root" role="group" aria-label="${L.root}">
                     <div class="sv" id="sv">
                         <div class="sv-paint"></div>
                         <div class="sv-thumb thumb" id="sv-thumb" tabindex="0" role="slider"
-                             aria-label="${L.sv}"
+                             aria-label="${L["sv-thumb"]}"
                              aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
                     </div>
 
                     <div class="strip hue" id="hue">
                         <div class="strip-thumb hue-thumb thumb" id="hue-thumb" tabindex="0" role="slider"
-                             aria-label="${L.hue}" aria-orientation="horizontal"
+                             aria-label="${L["hue-thumb"]}" aria-orientation="horizontal"
                              aria-valuemin="0" aria-valuemax="360" aria-valuenow="0"></div>
                     </div>
 
                     <div class="strip alpha checker" id="alpha">
                         <div class="alpha-grad"></div>
                         <div class="strip-thumb alpha-thumb thumb" id="alpha-thumb" tabindex="0" role="slider"
-                             aria-label="${L.opacity}" aria-orientation="horizontal"
+                             aria-label="${L["alpha-thumb"]}" aria-orientation="horizontal"
                              aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
                     </div>
 
                     <div class="rgb">
                         <div class="rgb-row">
                             <span class="ch" aria-hidden="true">R</span>
-                            <input type="range" id="r-range" min="0" max="255" step="1" aria-label="${L.red}">
+                            <input type="range" id="r-range" min="0" max="255" step="1" aria-label="${L["r-range"]}">
                             <input type="number" id="r-num" min="0" max="255" step="1"
-                                   inputmode="numeric" autocomplete="off" aria-label="${L.red}">
+                                   inputmode="numeric" autocomplete="off" aria-label="${L["r-num"]}">
                         </div>
                         <div class="rgb-row">
                             <span class="ch" aria-hidden="true">G</span>
-                            <input type="range" id="g-range" min="0" max="255" step="1" aria-label="${L.green}">
+                            <input type="range" id="g-range" min="0" max="255" step="1" aria-label="${L["g-range"]}">
                             <input type="number" id="g-num" min="0" max="255" step="1"
-                                   inputmode="numeric" autocomplete="off" aria-label="${L.green}">
+                                   inputmode="numeric" autocomplete="off" aria-label="${L["g-num"]}">
                         </div>
                         <div class="rgb-row">
                             <span class="ch" aria-hidden="true">B</span>
-                            <input type="range" id="b-range" min="0" max="255" step="1" aria-label="${L.blue}">
+                            <input type="range" id="b-range" min="0" max="255" step="1" aria-label="${L["b-range"]}">
                             <input type="number" id="b-num" min="0" max="255" step="1"
-                                   inputmode="numeric" autocomplete="off" aria-label="${L.blue}">
+                                   inputmode="numeric" autocomplete="off" aria-label="${L["b-num"]}">
                         </div>
                     </div>
 

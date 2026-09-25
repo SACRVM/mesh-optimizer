@@ -1,0 +1,232 @@
+/**
+ * SACRVM APPKIT — the kit's own UI strings in German.
+ *
+ * Loaded by all.js right after globals.js. English lives inline in the
+ * components as the fallback; this table only adds German. An app adds its
+ * own strings the same way: sac.i18n.add("de", { "myapp.save": "Speichern" }).
+ */
+(function () {
+    if (!window.sac || !sac.i18n || typeof sac.i18n.add !== "function") return;
+    sac.i18n.add("de", {
+        "about.this-app": "Diese App",
+        "about.title": "Über {name}",
+
+        "calendar.next-decade": "10 Jahre vor",
+        "calendar.next-month": "Nächster Monat",
+        "calendar.next-year": "Nächstes Jahr",
+        "calendar.prev-decade": "10 Jahre zurück",
+        "calendar.prev-month": "Voriger Monat",
+        "calendar.prev-year": "Voriges Jahr",
+
+        "chip-input.add": "Hinzufügen",
+        "chip-input.color-blue": "Blau",
+        "chip-input.color-gray": "Grau",
+        "chip-input.color-green": "Grün",
+        "chip-input.color-indigo": "Indigo",
+        "chip-input.color-orange": "Orange",
+        "chip-input.color-pink": "Pink",
+        "chip-input.color-purple": "Lila",
+        "chip-input.color-red": "Rot",
+        "chip-input.color-teal": "Petrol",
+        "chip-input.color-yellow": "Gelb",
+        "chip-input.create": "„{name}“ anlegen",
+        "chip-input.no-matches": "keine Treffer",
+        "chip-input.pick-color": "Farbe für „{name}“ wählen",
+
+        "chip.remove": "Entfernen",
+
+        "collapsible.less": "weniger",
+        "collapsible.more": "mehr",
+
+        "color-field.choose-color": "Farbe wählen",
+        "color-field.color-picker": "Farbwähler",
+        "color-field.hex-color": "Hex-Farbe",
+
+        "color-picker.blue": "Blau",
+        "color-picker.green": "Grün",
+        "color-picker.hex-color": "Hex-Farbe",
+        "color-picker.hue": "Farbton",
+        "color-picker.opacity": "Deckkraft",
+        "color-picker.red": "Rot",
+        "color-picker.saturation-value": "Sättigung und Helligkeit",
+        "color-picker.saturation-value-text": "Sättigung {s} %, Helligkeit {v} %",
+        "color-picker.title": "Farbwähler",
+
+        "copy-button.copy": "Kopieren",
+
+        "date-field.calendar": "Kalender",
+        "date-field.choose-date": "Datum wählen",
+        "date-field.date": "Datum",
+        "date-field.placeholder": "jjjj-mm-tt",
+
+        "dialog.ok": "OK",
+
+        "drop-zone.hint": "oder klicken zum Auswählen",
+        "drop-zone.hint-touch": "Tippen zum Auswählen",
+        "drop-zone.label": "Dateien hier ablegen",
+        "drop-zone.label-touch": "Dateien auswählen",
+
+        "files.accept-description": "Dateien",
+        "files.cancel": "Abbrechen",
+        "files.delete": "Löschen",
+        "files.delete-folder-empty": "ist leer und wird entfernt.",
+        "files.delete-folder-message": "und die {n} Datei(en) darin werden dauerhaft gelöscht.",
+        "files.delete-folder-title": "Diesen Ordner löschen?",
+        "files.delete-message": "wird dauerhaft gelöscht.",
+        "files.delete-title": "Diese Datei löschen?",
+        "files.empty": "Noch nichts vorhanden.",
+        "files.empty-folder": "Dieser Ordner ist leer.",
+        "files.from-device": "Von diesem Gerät öffnen…",
+        "files.list": "Dateien",
+        "files.location": "Speicherort",
+        "files.name": "Name",
+        "files.new-folder": "Neuer Ordner",
+        "files.new-folder-name": "Ordnername",
+        "files.open": "Öffnen",
+        "files.open-title": "Öffnen",
+        "files.replace": "Ersetzen",
+        "files.replace-message": "ist bereits vorhanden. Speichern ersetzt sie.",
+        "files.replace-title": "Diese Datei ersetzen?",
+        "files.root": "Dateien",
+        "files.save": "Speichern",
+        "files.save-title": "Speichern unter",
+        "files.to-device": "Stattdessen auf diesem Gerät speichern…",
+        "files.up": "Einen Ordner nach oben",
+
+        "filmstrip.add": "Frame hinzufügen",
+        "filmstrip.delete": "Frame löschen",
+        "filmstrip.duplicate": "Frame duplizieren",
+        "filmstrip.frame": "Frame {i} von {n}",
+        "filmstrip.frames": "Frames",
+
+        "footer.link": "LINK",
+
+        "help.check-console": "Details in der Konsole.",
+        "help.load-failed": "Dokumentation konnte nicht geladen werden",
+
+        "hotkeys.alt": "Alt",
+        "hotkeys.ctrl": "Strg",
+        "hotkeys.del": "Entf",
+        "hotkeys.end": "Ende",
+        "hotkeys.enter": "Enter",
+        "hotkeys.esc": "Esc",
+        "hotkeys.home": "Pos1",
+        "hotkeys.insert": "Einfg",
+        "hotkeys.pgdn": "Bild↓",
+        "hotkeys.pgup": "Bild↑",
+        "hotkeys.shift": "Umschalt",
+        "hotkeys.space": "Leertaste",
+        "hotkeys.tab": "Tab",
+        "hotkeys.win": "Win",
+
+        "lang-toggle.auto": "Auto",
+        "lang-toggle.auto-title": "Systemsprache folgen",
+        "lang-toggle.label": "Sprache",
+
+        "launcher.add": "Hinzufügen",
+        "launcher.add-app": "App hinzufügen",
+        "launcher.add-hint": "Das Skript wird beim ersten Öffnen geladen und muss das Tag definieren. Jede URL funktioniert – auch andere Websites.",
+        "launcher.cancel": "Abbrechen",
+        "launcher.done": "Fertig",
+        "launcher.edit": "Bearbeiten",
+        "launcher.error-name": "einen Namen",
+        "launcher.error-needs": "Eine App braucht {problems}.",
+        "launcher.error-src": "eine Skript-URL",
+        "launcher.error-tag": "ein Tag mit Bindestrich",
+        "launcher.field-height": "Höhe",
+        "launcher.field-icon": "Icon",
+        "launcher.field-name": "Name",
+        "launcher.field-src": "Skript-URL",
+        "launcher.field-tag": "Tag",
+        "launcher.field-width": "Breite",
+        "launcher.hide": "{name} ausblenden",
+        "launcher.move-left": "{name} nach links verschieben",
+        "launcher.move-right": "{name} nach rechts verschieben",
+        "launcher.no-apps": "Keine Apps registriert.",
+        "launcher.placeholder-height": "600px",
+        "launcher.placeholder-icon": "shapes (ein sac-icon-Name)",
+        "launcher.placeholder-name": "Meine App",
+        "launcher.placeholder-src": "apps/meine-app.js oder https://…",
+        "launcher.placeholder-tag": "app-meine-app",
+        "launcher.placeholder-width": "500px",
+        "launcher.remove": "{name} entfernen",
+        "launcher.show": "{name} einblenden",
+
+        "layer-list.add": "Ebene hinzufügen",
+        "layer-list.delete": "Ebene löschen",
+        "layer-list.duplicate": "Ebene duplizieren",
+        "layer-list.hidden": "ausgeblendet",
+        "layer-list.hide": "Ebene ausblenden",
+        "layer-list.hide-named": "{name} ausblenden",
+        "layer-list.layers": "Ebenen",
+        "layer-list.lock": "Ebene sperren",
+        "layer-list.lock-named": "{name} sperren",
+        "layer-list.locked": "gesperrt",
+        "layer-list.name": "Ebenenname",
+        "layer-list.show": "Ebene einblenden",
+        "layer-list.show-named": "{name} einblenden",
+        "layer-list.unlock": "Ebene entsperren",
+        "layer-list.unlock-named": "{name} entsperren",
+
+        "loader.loading": "Wird geladen …",
+
+        "log.clear": "Leeren",
+        "log.copied": "Kopiert!",
+        "log.copy": "Kopieren",
+        "log.header": "PROTOKOLL",
+
+        "nav.home": "Start",
+        "nav.host": "Host",
+        "nav.menu": "Menü",
+        "nav.more": "Mehr",
+        "nav.no-sections": "Noch keine Bereiche.",
+
+        "palette.commands": "Befehle",
+        "palette.empty": "Keine passenden Befehle",
+        "palette.group-views": "Ansichten",
+        "palette.group-apps": "Apps",
+        "palette.placeholder": "Befehl eingeben…",
+        "palette.search": "Befehle durchsuchen",
+        "palette.title": "Befehlspalette",
+
+        "pixel-canvas.label": "Pixel-Leinwand",
+
+        "scene.color": "Farbe",
+        "scene.delete": "Löschen",
+        "scene.expand": "Auf- / zuklappen",
+        "scene.unnamed": "Unbenannt",
+        "scene.visibility": "Sichtbarkeit umschalten",
+
+        "shortcuts.close": "Schließen",
+        "shortcuts.empty": "Keine Tastenkürzel registriert.",
+        "shortcuts.general": "Allgemein",
+        "shortcuts.help": "Hilfe",
+        "shortcuts.title": "Tastenkürzel",
+
+        "sidebar.label": "Bereiche",
+
+        "spinner.loading": "Lädt",
+
+        "split.back": "Zurück",
+        "split.resize-panels": "Bereichsgröße ändern",
+
+        "stepper.decrease": "Verringern",
+        "stepper.increase": "Erhöhen",
+
+        "theme-toggle.auto": "Auto",
+        "theme-toggle.dark": "Dunkel",
+        "theme-toggle.label": "Design",
+        "theme-toggle.light": "Hell",
+
+        "toast.dismiss": "Schließen",
+        "toast.notifications": "Benachrichtigungen",
+
+        "toolbox.group": "Werkzeuge",
+
+        "window.close": "Schließen",
+        "window.default-title": "Fenster",
+        "window.maximize": "Maximieren",
+        "window.minimize": "Minimieren",
+        "window.restore": "Wiederherstellen",
+    });
+})();

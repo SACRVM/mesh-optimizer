@@ -172,6 +172,7 @@ class SacSplit extends HTMLElement {
         this._ro = new ResizeObserver(() => { this._syncCollapse(); this._reclamp(); });
         this._ro.observe(this);
         this._syncLabel();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
         this._compactMQ.addEventListener("change", this._onCompact);
         this._syncCollapse();
         this._set(this._current === null ? this._parse(this.getAttribute("position")) : this._current,
@@ -179,6 +180,7 @@ class SacSplit extends HTMLElement {
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         this._compactMQ.removeEventListener("change", this._onCompact);
         this._ro?.disconnect();
         this._ro = null;
@@ -326,6 +328,10 @@ class SacSplit extends HTMLElement {
             this.getAttribute("aria-label") || t("split.resize-panels", "Resize panels"));
         this._backText.textContent = this.getAttribute("back-label") || t("split.back", "Back");
     }
+
+    /** Language switch: divider name + back label, in place (a running
+     *  drag, position and collapse state are untouched). */
+    _relabel() { this._syncLabel(); }
 
     /** The collapse threshold in px; 0 = never collapses. */
     _collapseAt() {

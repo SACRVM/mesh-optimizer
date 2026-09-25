@@ -99,6 +99,7 @@ class SacDropZone extends HTMLElement {
         window.addEventListener("drop", this._onWindowDragEnd);
         // A convertible flips between touch and mouse — follow it.
         SacDropZone.TOUCH.addEventListener("change", this._onTouchChange);
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
 
         this._sync();
     }
@@ -107,6 +108,7 @@ class SacDropZone extends HTMLElement {
         window.removeEventListener("dragend", this._onWindowDragEnd);
         window.removeEventListener("drop", this._onWindowDragEnd);
         SacDropZone.TOUCH.removeEventListener("change", this._onTouchChange);
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         this._clearOver();
     }
 
@@ -194,6 +196,12 @@ class SacDropZone extends HTMLElement {
             if (parts.length) this.setAttribute("aria-label", parts.join(". "));
             else this.removeAttribute("aria-label");
         }
+    }
+
+    /** Runtime language switch: _sync() already only writes text and
+     *  attributes onto the existing nodes, so it is the relabel. */
+    _relabel() {
+        if (this._label) this._sync();
     }
 
     /* -------------------------------------------------------------- files */

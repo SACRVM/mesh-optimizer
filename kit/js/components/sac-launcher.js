@@ -122,9 +122,11 @@ class SacLauncher extends HTMLElement {
         this._loadState();
         this._sync();
         this._syncEditUI();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         document.removeEventListener("sac:apps-changed", this._onReady);
         document.removeEventListener("DOMContentLoaded", this._onReady);
         document.removeEventListener("keydown", this._onDialogKeydown, true);
@@ -140,6 +142,21 @@ class SacLauncher extends HTMLElement {
         } else if (name === "edit") {
             this._syncEditUI();
         }
+    }
+
+    /**
+     * Language switch: every kit string in place — the add tile, the empty
+     * note, the Edit/Done button, each tile's control labels and an open (or
+     * built) Add dialog. Order, edit mode, focus and typed form values stay.
+     */
+    _relabel() {
+        if (!this._grid) return;
+        this._addLabel.textContent = t("launcher.add-app", "Add app");
+        this._empty.textContent = t("launcher.no-apps", "No apps registered.");
+        this._editBtn.textContent = this.hasAttribute("edit")
+            ? t("launcher.done", "Done") : t("launcher.edit", "Edit");
+        this._tiles.forEach((cell) => this._labelCell(cell));
+        if (this._dialog) this._labelForm();
     }
 
     /** Re-read the registry and re-sync the grid (targeted updates only). */
@@ -168,6 +185,7 @@ class SacLauncher extends HTMLElement {
         addIcon.setAttribute("name", "plus");
         const addLabel = document.createElement("span");
         addLabel.textContent = t("launcher.add-app", "Add app");
+        this._addLabel = addLabel;
         this._addBtn.append(addIcon, addLabel);
         this._addBtn.addEventListener("click", () => this._openAddDialog());
         this._addCell.appendChild(this._addBtn);
@@ -463,23 +481,30 @@ class SacLauncher extends HTMLElement {
         cell.classList.toggle("size-large", entry.tile === "large");
 
         cell._left.disabled = f.first;
-        cell._left.setAttribute("aria-label",
-            t("launcher.move-left", "Move {name} left").replace("{name}", name));
         cell._right.disabled = f.last;
-        cell._right.setAttribute("aria-label",
-            t("launcher.move-right", "Move {name} right").replace("{name}", name));
         cell._vis.querySelector("sac-icon").setAttribute("name", f.hidden ? "eye" : "eye-off");
-        cell._vis.setAttribute("aria-label", (f.hidden
-            ? t("launcher.show", "Show {name}")
-            : t("launcher.hide", "Hide {name}")).replace("{name}", name));
         cell._del.hidden = !f.custom; // built-ins can only be hidden, never removed
-        cell._del.setAttribute("aria-label",
-            t("launcher.remove", "Remove {name}").replace("{name}", name));
+        this._labelCell(cell);
 
         // In edit mode the tiles themselves are inert; keyboard focus goes
         // straight to the controls.
         if (this.hasAttribute("edit")) cell._tile.setAttribute("tabindex", "-1");
         else cell._tile.removeAttribute("tabindex");
+    }
+
+    /** The edit controls' labels — from the cell's current entry and state. */
+    _labelCell(cell) {
+        const entry = cell._entry;
+        const name = entry.name || entry.appId;
+        cell._left.setAttribute("aria-label",
+            t("launcher.move-left", "Move {name} left").replace("{name}", name));
+        cell._right.setAttribute("aria-label",
+            t("launcher.move-right", "Move {name} right").replace("{name}", name));
+        cell._vis.setAttribute("aria-label", (cell.classList.contains("hidden-app")
+            ? t("launcher.show", "Show {name}")
+            : t("launcher.hide", "Hide {name}")).replace("{name}", name));
+        cell._del.setAttribute("aria-label",
+            t("launcher.remove", "Remove {name}").replace("{name}", name));
     }
 
     _syncEditUI() {
@@ -576,20 +601,19 @@ class SacLauncher extends HTMLElement {
     _buildDialog() {
         const dlg = document.createElement("sac-dialog");
         dlg.setAttribute("title", t("launcher.add-app", "Add app"));
+        // labelKey: the dialog relabels its own buttons on a language switch.
         dlg.buttons = [
-            { action: "cancel", label: t("launcher.cancel", "Cancel"), kind: "default" },
-            { action: "add", label: t("launcher.add", "Add"), kind: "primary" },
+            { action: "cancel", label: "Cancel", labelKey: "launcher.cancel", kind: "default" },
+            { action: "add", label: "Add", labelKey: "launcher.add", kind: "primary" },
         ];
 
         this._form = {};
         const form = document.createElement("div");
         form.className = "sac-launcher-form";
 
-        const hint = document.createElement("p");
-        hint.className = "sac-launcher-form-hint";
-        hint.textContent = t("launcher.add-hint",
-            "The script is loaded on first open and must define the tag. Any URL works — including other sites.");
-        form.appendChild(hint);
+        this._formHint = document.createElement("p");
+        this._formHint.className = "sac-launcher-form-hint";
+        form.appendChild(this._formHint);
 
         this._formError = document.createElement("p");
         this._formError.className = "sac-launcher-form-error";
@@ -597,43 +621,50 @@ class SacLauncher extends HTMLElement {
         this._formError.hidden = true;
         form.appendChild(this._formError);
 
-        const field = (key, labelText, placeholder) => {
+        this._formLabels = {};
+        const field = (key) => {
             const wrap = document.createElement("div");
             const lab = document.createElement("label");
             lab.htmlFor = `${this._uid}-${key}`;
-            lab.textContent = labelText;
             const inp = document.createElement("input");
             inp.type = "text";
             inp.id = `${this._uid}-${key}`;
-            inp.placeholder = placeholder;
             wrap.append(lab, inp);
             this._form[key] = inp;
+            this._formLabels[key] = lab;
             return wrap;
         };
-        form.append(
-            field("name", t("launcher.field-name", "Name"),
-                          t("launcher.placeholder-name", "My App")),
-            field("icon", t("launcher.field-icon", "Icon"),
-                          t("launcher.placeholder-icon", "shapes (a sac-icon name)")),
-            field("tag",  t("launcher.field-tag", "Tag"),
-                          t("launcher.placeholder-tag", "app-my-app")),
-            field("src",  t("launcher.field-src", "Script URL"),
-                          t("launcher.placeholder-src", "apps/my-app.js or https://…")),
-        );
+        form.append(field("name"), field("icon"), field("tag"), field("src"));
         const row = document.createElement("div");
         row.className = "sac-launcher-form-row";
-        row.append(
-            field("width",  t("launcher.field-width", "Width"),
-                            t("launcher.placeholder-width", "500px")),
-            field("height", t("launcher.field-height", "Height"),
-                            t("launcher.placeholder-height", "600px")));
+        row.append(field("width"), field("height"));
         form.appendChild(row);
+        this._formProblems = [];
+        this._dialog = dlg;
+        this._labelForm();
 
         dlg.appendChild(form);
         document.body.appendChild(dlg);
         dlg.addEventListener("sac:action", (e) => this._onDialogAction(e.detail.action));
         this._dialog = dlg;
         this._formEl = form;
+    }
+
+    /** Every kit string of the Add dialog — at build and on a language
+     *  switch (in place: typed values, focus and the error state survive). */
+    _labelForm() {
+        this._dialog.setAttribute("title", t("launcher.add-app", "Add app"));
+        this._formHint.textContent = t("launcher.add-hint",
+            "The script is loaded on first open and must define the tag. Any URL works — including other sites.");
+        for (const [key, [label, placeholder]] of Object.entries(SacLauncher.FIELDS)) {
+            this._formLabels[key].textContent = t(`launcher.field-${key}`, label);
+            this._form[key].placeholder = t(`launcher.placeholder-${key}`, placeholder);
+        }
+        if (this._formProblems.length) {
+            const problems = this._formProblems.map((k) => t(`launcher.error-${k}`, SacLauncher.PROBLEMS[k]));
+            this._formError.textContent = t("launcher.error-needs", "An app needs {problems}.")
+                .replace("{problems}", problems.join(", "));
+        }
     }
 
     _onDialogKeydown(e) {
@@ -685,12 +716,12 @@ class SacLauncher extends HTMLElement {
 
         this._clearFormErrors();
         if (badName || badTag || badSrc) {
-            const problems = [];
-            if (badName) { problems.push(t("launcher.error-name", "a name")); f.name.setAttribute("aria-invalid", "true"); }
-            if (badTag) { problems.push(t("launcher.error-tag", "a tag containing a dash")); f.tag.setAttribute("aria-invalid", "true"); }
-            if (badSrc) { problems.push(t("launcher.error-src", "a script URL")); f.src.setAttribute("aria-invalid", "true"); }
-            this._formError.textContent = t("launcher.error-needs", "An app needs {problems}.")
-                .replace("{problems}", problems.join(", "));
+            // Kept as keys, so a language switch can re-word the message.
+            const problems = this._formProblems = [];
+            if (badName) { problems.push("name"); f.name.setAttribute("aria-invalid", "true"); }
+            if (badTag) { problems.push("tag"); f.tag.setAttribute("aria-invalid", "true"); }
+            if (badSrc) { problems.push("src"); f.src.setAttribute("aria-invalid", "true"); }
+            this._labelForm();
             this._formError.hidden = false;
             // Re-open immediately (same task, no repaint between) — the form
             // and its values are light DOM and survive untouched.
@@ -725,6 +756,7 @@ class SacLauncher extends HTMLElement {
 
     _clearFormErrors() {
         if (!this._formEl) return;
+        this._formProblems = [];
         this._formError.hidden = true;
         this._formError.textContent = "";
         this._formEl.querySelectorAll("[aria-invalid]").forEach(inp =>
@@ -972,6 +1004,22 @@ class SacLauncher extends HTMLElement {
     }
 }
 SacLauncher._instances = 0;
+/** Add-dialog fields: key → [label, placeholder] English fallbacks
+ *  (keys launcher.field-<key> / launcher.placeholder-<key>). */
+SacLauncher.FIELDS = {
+    name:   ["Name", "My App"],
+    icon:   ["Icon", "shapes (a sac-icon name)"],
+    tag:    ["Tag", "app-my-app"],
+    src:    ["Script URL", "apps/my-app.js or https://…"],
+    width:  ["Width", "500px"],
+    height: ["Height", "600px"],
+};
+/** Add-dialog validation problems: key → fallback (launcher.error-<key>). */
+SacLauncher.PROBLEMS = {
+    name: "a name",
+    tag:  "a tag containing a dash",
+    src:  "a script URL",
+};
 
 customElements.define("sac-launcher", SacLauncher);
 })();

@@ -64,6 +64,12 @@
  * — override --accent on the element for an edit-mode ribbon, the same
  * per-element mechanism as <sac-segmented-control>.
  */
+/** Kit i18n: sac.t when globals.js is loaded, the English fallback when the
+ *  component runs standalone. (A top-level name: `t` is the tool loop
+ *  variable inside the class.) */
+const sacToolboxT = (key, fallback) =>
+    (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
 class SacToolbox extends HTMLElement {
     static get observedAttributes() { return ["value", "columns", "hotkeys", "group", "disabled"]; }
 
@@ -81,11 +87,26 @@ class SacToolbox extends HTMLElement {
         this._applyColumns();
         this._build();
         this._bindKeys();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
         this._unbindKeys();
         this._dropTips();
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Runtime language switch. Tool labels are app data; what changes is
+     *  the key-cap spelling inside each tooltip ("Del" → "Entf"). Updated in
+     *  place — buttons, focus and the active tool are untouched. The hotkey
+     *  group resolves itself (a function, see _bindKeys). */
+    _relabel() {
+        const btns = this._buttons();
+        this._entries().forEach((tool, i) => {
+            const label = this._label(tool);
+            if (this._tips[i]) this._tips[i].update(label);
+            else if (btns[i] && btns[i].hasAttribute("title")) btns[i].title = label;
+        });
     }
 
     attributeChangedCallback(name) {
@@ -351,7 +372,8 @@ class SacToolbox extends HTMLElement {
         this._unbindKeys();
         if (!this.isConnected || !this.hasAttribute("hotkeys")) return;
         if (!(window.sac && sac.hotkeys)) return;
-        const group = this.getAttribute("group") || "Tools";
+        // A function: listings resolve the default heading in the current language.
+        const group = () => this.getAttribute("group") || sacToolboxT("toolbox.group", "Tools");
         for (const t of this._entries()) {
             if (!t.key) continue;
             const id = String(t.id);

@@ -52,6 +52,11 @@
  *   forApp()            the app-facing view (open/save/kind) — context.files
  *
  * `accept` is the <input accept> grammar — ".png,image/*" or an array.
+ *
+ * Language: the virtual dialog's kit strings follow a runtime switch while
+ * it is open (title unless the caller gave one, buttons, the name label,
+ * the device link; the file list relabels itself). The replace question is
+ * a short-lived confirm — its buttons follow, its text is set once.
  */
 (function () {
     if (!window.sac) { console.warn("[sac.files] globals.js must load first — files unavailable."); return; }
@@ -247,10 +252,14 @@
             const saving = mode === "save";
             const dlg = document.createElement("sac-dialog");
             dlg.className = "sac-files-dialog";
-            dlg.setAttribute("title", title || (saving ? t("files.save-title", "Save as") : t("files.open-title", "Open")));
+            const kitTitle = () => (saving ? t("files.save-title", "Save as") : t("files.open-title", "Open"));
+            dlg.setAttribute("title", title || kitTitle());
+            // labelKey: sac-dialog relabels its buttons on a language switch.
             dlg.buttons = [
-                { action: "cancel", label: t("files.cancel", "Cancel") },
-                { action: "ok", label: saving ? t("files.save", "Save") : t("files.open", "Open"), kind: "primary", disabled: true },
+                { action: "cancel", label: "Cancel", labelKey: "files.cancel" },
+                saving
+                    ? { action: "ok", label: "Save", labelKey: "files.save", kind: "primary", disabled: true }
+                    : { action: "ok", label: "Open", labelKey: "files.open", kind: "primary", disabled: true },
             ];
 
             const body = document.createElement("div");
@@ -267,7 +276,7 @@
             if (saving) {
                 const row = document.createElement("div");
                 row.className = "sac-files-row";
-                row.innerHTML = `<label for="sac-files-name">${t("files.name", "Name")}</label>
+                row.innerHTML = `<label for="sac-files-name"></label>
                     <input id="sac-files-name" type="text" spellcheck="false" autocomplete="off">`;
                 nameInput = row.querySelector("input");
                 nameInput.value = name || "";
@@ -278,12 +287,23 @@
             const device = document.createElement("button");
             device.type = "button";
             device.className = "sac-files-device";
-            device.innerHTML = saving
-                ? `${icon("download")}<span>${t("files.to-device", "Save to this device instead…")}</span>`
-                : `${icon("upload")}<span>${t("files.from-device", "Open from this device…")}</span>`;
+            device.innerHTML = `${icon(saving ? "download" : "upload")}<span></span>`;
             device.addEventListener("click", () => { choice = { device: true }; dlg.close("device"); });
             body.appendChild(device);
             dlg.appendChild(body);
+
+            // Kit strings as text / attributes on the live nodes — run now
+            // and again on every language switch while the dialog is up.
+            const relabel = () => {
+                if (!title) dlg.setAttribute("title", kitTitle());
+                const lbl = body.querySelector(".sac-files-row label");
+                if (lbl) lbl.textContent = t("files.name", "Name");
+                device.querySelector("span").textContent = saving
+                    ? t("files.to-device", "Save to this device instead…")
+                    : t("files.from-device", "Open from this device…");
+            };
+            relabel();
+            const offLang = sac.lang ? sac.lang.onChange(relabel) : () => {};
 
             const targetPath = () => {
                 let n = (nameInput.value || "").trim().replace(/^\/+|\/+$/g, "");
@@ -327,8 +347,8 @@
                         title: t("files.replace-title", "Replace this file?"),
                         message: `“${path.slice(path.lastIndexOf("/") + 1)}” ${t("files.replace-message", "already exists. Saving replaces it.")}`,
                         buttons: [
-                            { action: "cancel", label: t("files.cancel", "Cancel") },
-                            { action: "replace", label: t("files.replace", "Replace"), kind: "destructive" },
+                            { action: "cancel", label: "Cancel", labelKey: "files.cancel" },
+                            { action: "replace", label: "Replace", labelKey: "files.replace", kind: "destructive" },
                         ],
                     });
                     if (answer !== "replace") return false;
@@ -338,6 +358,7 @@
             };
 
             dlg.addEventListener("sac:action", () => {
+                offLang();
                 setTimeout(() => { dlg.remove(); resolve(choice); }, 120);
             }, { once: true });
 

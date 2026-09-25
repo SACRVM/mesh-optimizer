@@ -106,9 +106,13 @@ class SacDateField extends HTMLElement {
         document.addEventListener("keydown", this._onDocKeydown, true);
         window.addEventListener("scroll", this._onReposition, true);
         window.addEventListener("resize", this._onReposition);
+        // Runtime language switch: relabel in place (the popover calendar
+        // relabels itself); typing, value and an open popover survive.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         this._closePopover(false);            // never leave a popover anchored to nothing
         if (this._lowerTimer != null) {
             clearTimeout(this._lowerTimer);
@@ -249,6 +253,15 @@ class SacDateField extends HTMLElement {
 
     _syncPlaceholder() {
         this._input.placeholder = this.getAttribute("placeholder") || t("date-field.placeholder", "yyyy-mm-dd");
+    }
+
+    /** Kit strings in the current language, on the existing nodes. */
+    _relabel() {
+        if (!this._input) return;
+        this._syncLabel();
+        this._syncPlaceholder();
+        this._well.setAttribute("aria-label", t("date-field.choose-date", "Choose date"));
+        if (this._popover) this._popover.setAttribute("aria-label", t("date-field.calendar", "Calendar"));
     }
 
     _syncDisabled() {

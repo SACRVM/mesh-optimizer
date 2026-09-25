@@ -29,8 +29,10 @@
  *     from an actively-interacting user.
  *
  * Buttons: { action, label, kind: "default"|"primary"|"destructive",
- *            armAfterMs?, disabled? }. setDisabled(action, flag) toggles one
- *            later (a Save that waits for a filename).
+ *            armAfterMs?, disabled?, labelKey? }. setDisabled(action, flag)
+ *            toggles one later (a Save that waits for a filename). labelKey
+ *            makes `label` the English fallback of sac.t(labelKey): the
+ *            button then follows a runtime language switch in place.
  *
  * Validation: dlg.beforeAction = (action) => boolean | Promise<boolean>.
  *   Called on every BUTTON click (and trigger(action)); answering false keeps
@@ -60,6 +62,28 @@ class SacDialog extends HTMLElement {
 
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** A button's text: its labelKey through sac.t (label = the English
+     *  fallback), else the caller's label as given. */
+    static _label(spec) {
+        return (spec.labelKey && window.sac && window.sac.t)
+            ? window.sac.t(spec.labelKey, spec.label) : spec.label;
+    }
+
+    /** Language switch: buttons with a labelKey, in place — focus, the arm
+     *  timer and disabled state are untouched. Title and body are the
+     *  caller's. */
+    _relabel() {
+        this.shadowRoot.querySelectorAll(".actions .btn").forEach((btn, i) => {
+            const spec = this.buttons[i];
+            if (spec && spec.labelKey) btn.textContent = SacDialog._label(spec);
+        });
     }
 
     attributeChangedCallback() {
@@ -412,7 +436,7 @@ class SacDialog extends HTMLElement {
             const btn = document.createElement("button");
             btn.className = "btn" + (spec.kind && spec.kind !== "default" ? " " + spec.kind : "");
             btn.type = "button";
-            btn.textContent = spec.label;
+            btn.textContent = SacDialog._label(spec);
             btn.dataset.action = spec.action == null ? "" : String(spec.action);
             btn.disabled = !!spec.disabled;
             btn.addEventListener("click", () => this.trigger(spec.action));

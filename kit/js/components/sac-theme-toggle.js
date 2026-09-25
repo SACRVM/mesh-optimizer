@@ -65,6 +65,21 @@ class SacThemeToggle extends HTMLElement {
         this._apply(theme);
         this._theme = theme;
         this._highlight(theme);
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Language switch: pill texts + the cycle button's label, in place. */
+    _relabel() {
+        const names = { dark: "Dark", light: "Light", auto: "Auto" };
+        this.shadowRoot.querySelectorAll(".pill button").forEach((btn) => {
+            const th = btn.dataset.theme;
+            btn.textContent = t("theme-toggle." + th, names[th]);
+        });
+        this._highlight(this._theme);
     }
 
     get theme() { return this._theme; }

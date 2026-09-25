@@ -20,6 +20,17 @@
 const t = (key, fallback) =>
     (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+/* The error panel is the loader's only kit text. It carries its keys in
+ * data-sac-help attributes, so a runtime language switch relabels every
+ * error panel on the page in place — one listener for the whole module. */
+const relabelErrors = () => {
+    document.querySelectorAll('[data-sac-help]').forEach((el) => {
+        const [key, fallback] = el.getAttribute('data-sac-help').split('|');
+        el.textContent = t(key, fallback);
+    });
+};
+if (window.sac && window.sac.lang) window.sac.lang.onChange(relabelErrors);
+
 export async function loadHelp(filename, targetElementId = 'help-content') {
     const contentDiv = document.getElementById(targetElementId);
     if (!contentDiv) {
@@ -68,9 +79,9 @@ export async function loadHelp(filename, targetElementId = 'help-content') {
         const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
         contentDiv.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: var(--danger-text);">
-                <h3>${esc(t('help.load-failed', 'Failed to load documentation'))}</h3>
+                <h3 data-sac-help="help.load-failed|Failed to load documentation">${esc(t('help.load-failed', 'Failed to load documentation'))}</h3>
                 <p style="font-family: monospace; font-size: 0.8rem; background: var(--field); padding: 0.5rem; border-radius: var(--radius-m);">${err.message}</p>
-                <p style="font-size: 0.8rem; opacity: 0.7;">${esc(t('help.check-console', 'Check console for details.'))}</p>
+                <p style="font-size: 0.8rem; opacity: 0.7;" data-sac-help="help.check-console|Check console for details.">${esc(t('help.check-console', 'Check console for details.'))}</p>
             </div>
         `;
     }

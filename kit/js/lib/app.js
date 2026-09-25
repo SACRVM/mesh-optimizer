@@ -129,6 +129,12 @@
             // The user's files: standalone that is the device (the browser
             // provider) unless the page installed another.
             files: window.sac.files ? sac.files.forApp() : null,
+            // The page's language (globals.js): read-only for apps — the
+            // host owns the switch, like the theme. Re-render on onChange.
+            lang: window.sac.lang ? {
+                get: () => sac.lang.get(),
+                onChange: (cb) => sac.lang.onChange(cb),
+            } : null,
             // Standalone the app IS the page: unsaved work arms the browser's
             // leave-page question, exactly as a desktop would.
             setDirty(flag) {

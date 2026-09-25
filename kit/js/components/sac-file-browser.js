@@ -50,6 +50,10 @@
  * Backspace goes up · Delete removes a file or folder (asks first) · Shift+↑/↓ extends when
  * `multiple`.
  *
+ * Language: every kit string goes through sac.t and follows a runtime
+ * switch in place (folder, selection, focus row and scroll survive); sizes
+ * and dates are formatted in sac.lang.locale().
+ *
  * Compact: under a 480px container the size and date columns drop out; rows
  * are 44px on touch.
  *
@@ -85,11 +89,17 @@
         };
     }
 
+    /** The page language's locale for Intl output; the browser's own when
+     *  globals.js is not loaded. Read per call — the language can change. */
+    const locale = () => (window.sac && sac.lang ? sac.lang.locale() : undefined);
+
     function formatSize(bytes) {
         if (bytes == null) return "";
         if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
-        return `${(bytes / 1048576).toFixed(1)} MB`;
+        const num = (v, digits) => v.toLocaleString(locale(),
+            { minimumFractionDigits: digits, maximumFractionDigits: digits });
+        if (bytes < 1024 * 1024) return `${num(bytes / 1024, bytes < 10240 ? 1 : 0)} KB`;
+        return `${num(bytes / 1048576, 1)} MB`;
     }
     function formatDate(ms) {
         if (!ms) return "";
@@ -97,8 +107,8 @@
         const today = new Date();
         const sameDay = d.toDateString() === today.toDateString();
         return sameDay
-            ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-            : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+            ? d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })
+            : d.toLocaleDateString(locale(), { year: "numeric", month: "short", day: "numeric" });
     }
 
     class SacFileBrowser extends HTMLElement {
@@ -120,8 +130,46 @@
         connectedCallback() {
             if (!this.shadowRoot.firstChild) this._render();
             if (this._store) this.refresh();
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
         }
-        disconnectedCallback() { this._revoke(); }
+        disconnectedCallback() {
+            this._revoke();
+            if (this._offLang) { this._offLang(); this._offLang = null; }
+        }
+
+        /** Runtime language switch: chrome labels in place, then crumbs and
+         *  rows repainted from the component's own state (folder, selection,
+         *  focus row) — no reload. Scroll and an open new-folder field survive. */
+        _relabel() {
+            const sr = this.shadowRoot;
+            if (!sr.firstChild) return;
+            const label = (sel, text, title) => {
+                const el = sr.querySelector(sel);
+                if (!el) return;
+                el.setAttribute("aria-label", text);
+                if (title) el.setAttribute("title", text);
+            };
+            label(".up", t("files.up", "Up one folder"), true);
+            label(".mk", t("files.new-folder", "New folder"), true);
+            label(".crumbs", t("files.location", "Location"));
+            label(".list", t("files.list", "Files"));
+            this._crumbs();
+            const list = sr.querySelector(".list");
+            const scroll = list.scrollTop;
+            const pending = list.querySelector(".new-folder");
+            if (pending) pending.remove();     // detached, not settled: its blur is ignored
+            this._paint();
+            if (pending) {
+                list.querySelector(".empty")?.remove();
+                list.prepend(pending);
+                const input = pending.querySelector("input");
+                const name = t("files.new-folder-name", "Folder name");
+                input.setAttribute("aria-label", name);
+                input.setAttribute("placeholder", name);
+                input.focus({ preventScroll: true });
+            }
+            list.scrollTop = scroll;
+        }
         attributeChangedCallback() {
             if (!this.shadowRoot.firstChild) return;
             this._crumbs();
@@ -611,8 +659,9 @@
                                   : t("files.delete-title", "Delete this file?"),
                     message,
                     buttons: [
-                        { action: "cancel", label: t("files.cancel", "Cancel") },
-                        { action: "delete", label: t("files.delete", "Delete"), kind: "destructive", armAfterMs: 1200 },
+                        // labelKey: the buttons follow a language switch in place.
+                        { action: "cancel", label: "Cancel", labelKey: "files.cancel" },
+                        { action: "delete", label: "Delete", labelKey: "files.delete", kind: "destructive", armAfterMs: 1200 },
                     ],
                 });
             }

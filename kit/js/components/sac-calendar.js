@@ -12,8 +12,10 @@
  * Dates cross the API as ISO strings ("yyyy-mm-dd") — never Date objects.
  * All math runs on local calendar dates, so there is no UTC off-by-one and
  * 2026-02-31 is rejected as the non-date it is. Month and weekday names come
- * from Intl in the browser's locale — no locale data is shipped, and no
- * time zones exist here: the suite speaks pure local calendar dates.
+ * from Intl in the page language's locale (sac.lang.locale(), the browser's
+ * own when standalone) and follow a runtime language switch in place — no
+ * locale data is shipped, and no time zones exist here: the suite speaks
+ * pure local calendar dates.
  *
  * Attributes:
  *   value      — ISO selected date, reflected. Read tolerantly (whitespace
@@ -79,6 +81,21 @@
      *  the component runs standalone. */
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
+    /** Locale for Intl output: the page language's (sac.lang), else the
+     *  browser's own (undefined). */
+    const locale = () => (window.sac && window.sac.lang) ? window.sac.lang.locale() : undefined;
+
+    /** Header paging buttons: id → [key, English]. Tooltip and aria-label
+     *  share one translation. */
+    const NAV = {
+        "prev-dec":  ["calendar.prev-decade", "Back 10 years"],
+        "prev-year": ["calendar.prev-year",   "Previous year"],
+        "prev":      ["calendar.prev-month",  "Previous month"],
+        "next":      ["calendar.next-month",  "Next month"],
+        "next-year": ["calendar.next-year",   "Next year"],
+        "next-dec":  ["calendar.next-decade", "Forward 10 years"],
+    };
 
     /* ------------------------------------------------------- date helpers */
     /* Plain { y, m, d } records (m is 1-based), Date objects only as local
@@ -172,6 +189,23 @@
             this._ready = true;
             this._reflect();
             this._syncAll();
+            // Runtime language switch: relabel in place, keep view and focus.
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+        }
+
+        disconnectedCallback() {
+            if (this._offLang) { this._offLang(); this._offLang = null; }
+        }
+
+        /** Header labels + Intl names in the current language, in place. */
+        _relabel() {
+            for (const id in NAV) {
+                const btn = this.shadowRoot.getElementById(id);
+                const text = t(NAV[id][0], NAV[id][1]);
+                btn.setAttribute("aria-label", text);
+                btn.title = text;
+            }
+            if (this._ready) this._syncAll();
         }
 
         attributeChangedCallback(name) {
@@ -239,12 +273,12 @@
             return (makeDate(d.y, d.m, d.d).getDay() - this._weekStart() + 7) % 7;
         }
 
-        /** Intl formatter in the BROWSER's locale — date output is always
-         *  browser-specific by kit rule (undefined = the browser decides;
-         *  never a hand-rolled format, never a declared page lang that lies
-         *  about the reader). */
+        /** Intl formatter in the page language's locale — sac.lang.locale()
+         *  prefers the browser's own regional entry for that language, and
+         *  standalone it is undefined (the browser decides). Never a
+         *  hand-rolled format. */
         _fmt(opts) {
-            return new Intl.DateTimeFormat(undefined, opts);
+            return new Intl.DateTimeFormat(locale(), opts);
         }
 
         /* ------------------------------------------------------------ sync */
@@ -391,14 +425,8 @@
         _render() {
             // Header strings: tooltip and aria-label share one translation.
             const esc = (s) => String(s).replace(/"/g, "&quot;");
-            const L = {
-                prevDec:  esc(t("calendar.prev-decade", "Back 10 years")),
-                prevYear: esc(t("calendar.prev-year",   "Previous year")),
-                prevMon:  esc(t("calendar.prev-month",  "Previous month")),
-                nextMon:  esc(t("calendar.next-month",  "Next month")),
-                nextYear: esc(t("calendar.next-year",   "Next year")),
-                nextDec:  esc(t("calendar.next-decade", "Forward 10 years")),
-            };
+            const L = {};
+            for (const id in NAV) L[id] = esc(t(NAV[id][0], NAV[id][1]));
             const cells = '<button type="button" class="day" role="gridcell" tabindex="-1"></button>'.repeat(7);
             const weeks = Array.from({ length: 6 },
                 () => `<div class="row" role="row">${cells}</div>`).join("");
@@ -570,23 +598,23 @@
                     }
                 </style>
                 <div class="head">
-                    <button type="button" class="nav" id="prev-dec" aria-label="${L.prevDec}" title="${L.prevDec}">
+                    <button type="button" class="nav" id="prev-dec" aria-label="${L["prev-dec"]}" title="${L["prev-dec"]}">
                         <sac-icon name="chevron-triple-left"></sac-icon>
                     </button>
-                    <button type="button" class="nav" id="prev-year" aria-label="${L.prevYear}" title="${L.prevYear}">
+                    <button type="button" class="nav" id="prev-year" aria-label="${L["prev-year"]}" title="${L["prev-year"]}">
                         <sac-icon name="chevron-double-left"></sac-icon>
                     </button>
-                    <button type="button" class="nav" id="prev" aria-label="${L.prevMon}" title="${L.prevMon}">
+                    <button type="button" class="nav" id="prev" aria-label="${L["prev"]}" title="${L["prev"]}">
                         <sac-icon name="chevron-left"></sac-icon>
                     </button>
                     <div class="label" id="label" aria-live="polite"></div>
-                    <button type="button" class="nav" id="next" aria-label="${L.nextMon}" title="${L.nextMon}">
+                    <button type="button" class="nav" id="next" aria-label="${L["next"]}" title="${L["next"]}">
                         <sac-icon name="chevron-right"></sac-icon>
                     </button>
-                    <button type="button" class="nav" id="next-year" aria-label="${L.nextYear}" title="${L.nextYear}">
+                    <button type="button" class="nav" id="next-year" aria-label="${L["next-year"]}" title="${L["next-year"]}">
                         <sac-icon name="chevron-double-right"></sac-icon>
                     </button>
-                    <button type="button" class="nav" id="next-dec" aria-label="${L.nextDec}" title="${L.nextDec}">
+                    <button type="button" class="nav" id="next-dec" aria-label="${L["next-dec"]}" title="${L["next-dec"]}">
                         <sac-icon name="chevron-triple-right"></sac-icon>
                     </button>
                 </div>

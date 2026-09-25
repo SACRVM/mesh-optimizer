@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="../kit/css/ui.css">
 
     <script defer src="../kit/js/lib/globals.js"></script>
+    <script defer src="../kit/js/i18n/de.js"></script>
     <script defer src="../kit/js/lib/icons.js"></script>
     <script defer src="../kit/js/lib/hotkeys.js"></script>
     <script defer src="../kit/js/components/sac-icon.js"></script>
@@ -27,6 +28,7 @@
     <script defer src="../kit/js/components/sac-chip.js"></script>
     <script defer src="../kit/js/components/sac-toast.js"></script>
     <script defer src="../kit/js/components/sac-theme-toggle.js"></script>
+    <script defer src="../kit/js/components/sac-lang-toggle.js"></script>
     <script defer src="../kit/js/components/sac-command-palette.js"></script>
 
     <style>
@@ -84,7 +86,7 @@
 </head>
 <body class="app-page">
     <sac-nav brand="MY APP" brand-icon="cube" app-name="PEOPLE">
-        <div slot="context"><sac-theme-toggle></sac-theme-toggle></div>
+        <div slot="context"><sac-lang-toggle></sac-lang-toggle><sac-theme-toggle></sac-theme-toggle></div>
     </sac-nav>
 
     <!-- LIST / DETAIL. One <sac-split>: list in "start", detail in "end".

@@ -9,6 +9,9 @@
  */
 (function () {
     if (window.sac) return; // idempotent
+
+    // Per-language string tables: { de: { "window.close": "Schließen" } }.
+    const TABLES = Object.create(null);
     window.sac = {
         router:   null, // populated by router.js
         icons:    null, // populated by icons.js
@@ -25,29 +28,56 @@
         palette:  null, // installed by sac-command-palette.js (the connected instance)
 
         /**
-         * i18n — the kit's few UI strings (tooltips, aria-labels, button
-         * text). English lives inline in the components as the fallback, so
-         * the kit needs zero setup. To translate, assign a flat key table in
-         * a deferred script loaded AFTER globals.js and BEFORE the component
-         * scripts (components read strings when they render):
+         * i18n — every UI string the kit (and any app) shows, per language.
          *
-         *     Object.assign(sac.i18n, {
-         *         "calendar.prev-month": "Voriger Monat",
-         *         "window.close": "Schließen",
-         *     });
+         *   sac.t(key, fallback)          the string in the CURRENT language;
+         *                                 the inline English fallback when no
+         *                                 table has the key — zero setup.
+         *   sac.i18n.add(lang, table)     merge a flat { key: string } table
+         *                                 for one language. The kit ships
+         *                                 kit/js/i18n/de.js; an app adds its
+         *                                 own keys (namespaced: "atelier.save")
+         *                                 for every language it speaks.
          *
-         * Language is boot-time, like the browser locale that drives the
-         * Intl month names. Components stay standalone: without globals.js
-         * they simply render their English fallbacks. Key list: style guide.
-         * Date/number OUTPUT is never translated here — that is Intl's job,
-         * always in the browser's locale.
+         * Legacy: a flat key table assigned straight onto sac.i18n
+         * (Object.assign(sac.i18n, {…})) is still honoured, for every
+         * language, after the current language's table.
+         * Key list: style guide → Helpers → sac.lang / sac.t.
          */
         i18n: Object.create(null),
         t(key, fallback) {
+            const lang = this.lang ? this.lang.get() : "en";
+            const table = TABLES[lang];
+            if (table && table[key] !== undefined) return table[key];
             const v = this.i18n[key];
             return v === undefined ? fallback : v;
         },
 
+        /**
+         * lang — ONE language for the whole page, switchable at runtime,
+         * owned by the host exactly like the theme. Apps read it
+         * (context.lang) and re-render on change; kit components do that
+         * themselves.
+         *
+         *   get()          the current code ("en", "de", …)
+         *   mode()         "auto" (follows the system) or the chosen code
+         *   set(code)      "auto" or a code; persisted (localStorage
+         *                  "sac-lang"), mirrored onto <html lang>, announced
+         *   onChange(cb)   cb(code) on every change, incl. other tabs;
+         *                  returns an unsubscribe
+         *   available()    codes that have a table, "en" first
+         *   name(code)     the language's own name ("Deutsch") via Intl
+         *   locale()       a full locale for Intl date / number output: the
+         *                  browser's own entry for this language when it has
+         *                  one ("de-AT"), else the code
+         *
+         * Default ("auto"): the system language as far as a page can see it.
+         * No web API exposes the OS language, so this is the first entry of
+         * navigator.languages the kit has a table for — else English.
+         *
+         * Event: sac:lang on document, detail { lang }.
+         */
+        lang: null,
         /* Event naming — one convention across every component:
          *
          *   • Every custom event is `sac:`-prefixed. The event name never
@@ -81,4 +111,101 @@
          * project fragments into. Actions the command palette should reach
          * are registered on sac.commands. */
     };
+
+    /* ------------------------------------------------------ language -- */
+
+    const KEY = "sac-lang";
+    const listeners = new Set();
+    const norm = (code) => String(code || "").trim().toLowerCase().split(/[-_]/)[0];
+
+    Object.defineProperty(window.sac.i18n, "add", {
+        enumerable: false,
+        value(lang, table) {
+            const code = norm(lang);
+            if (!code || !table || typeof table !== "object") return;
+            TABLES[code] = Object.assign(TABLES[code] || Object.create(null), table);
+            // A new table can change what "auto" resolves to (a German
+            // system, the German table just arrived): follow it. Strings in
+            // an already-current language are picked up by whoever renders
+            // next — announce() fires only on a real language change.
+            if (typeof announce === "function") announce();
+        },
+    });
+
+    // The explicit choice: localStorage, with an in-memory copy for when
+    // storage refuses (private mode) — the switch still holds for this page.
+    let chosen;
+    function choice() {
+        if (chosen !== undefined) return chosen;
+        try { chosen = norm(localStorage.getItem(KEY)); } catch (err) { chosen = ""; }
+        return chosen;
+    }
+
+    /** The system language, as far as the browser tells a page. */
+    function detect() {
+        const prefs = (navigator.languages && navigator.languages.length)
+            ? navigator.languages : [navigator.language || "en"];
+        for (const p of prefs) {
+            const code = norm(p);
+            if (code === "en" || TABLES[code]) return code;
+        }
+        return "en";
+    }
+
+    const current = () => choice() || detect();
+
+    let last = null;
+    function announce() {
+        const now = current();
+        document.documentElement.lang = now;
+        if (now === last) return;
+        last = now;
+        for (const cb of listeners) {
+            try { cb(now); }
+            catch (err) { console.error("[sac.lang] a listener threw:", err); }
+        }
+        document.dispatchEvent(new CustomEvent("sac:lang", { detail: { lang: now }, bubbles: true }));
+    }
+
+    window.sac.lang = {
+        get: current,
+        mode() { return choice() || "auto"; },
+        set(code) {
+            chosen = code === "auto" ? "" : norm(code);
+            try {
+                if (chosen) localStorage.setItem(KEY, chosen);
+                else localStorage.removeItem(KEY);
+            } catch (err) { /* the in-memory choice still applies */ }
+            announce();
+        },
+        onChange(cb) {
+            if (typeof cb !== "function") return () => {};
+            listeners.add(cb);
+            return () => listeners.delete(cb);
+        },
+        available() {
+            return ["en", ...Object.keys(TABLES).filter((c) => c !== "en").sort()];
+        },
+        name(code) {
+            const c = norm(code);
+            try {
+                const n = new Intl.DisplayNames([c], { type: "language" }).of(c);
+                return n ? n.charAt(0).toLocaleUpperCase(c) + n.slice(1) : c.toUpperCase();
+            } catch (err) { return c.toUpperCase(); }
+        },
+        locale() {
+            const c = current();
+            const prefs = navigator.languages || [navigator.language || ""];
+            return prefs.find((p) => norm(p) === c) || c;
+        },
+    };
+
+    // Another tab switched: follow it.
+    window.addEventListener("storage", (e) => {
+        if (e.key !== KEY) return;
+        chosen = undefined;
+        announce();
+    });
+    last = current();
+    document.documentElement.lang = last;
 })();

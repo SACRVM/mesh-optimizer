@@ -48,6 +48,13 @@
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+    /** Palette slot → English name, for the color picker's swatch tooltips
+     *  (key "chip-input.color-<slot>"). */
+    const SLOT_NAMES = {
+        blue: "Blue", orange: "Orange", red: "Red", green: "Green", purple: "Purple",
+        pink: "Pink", yellow: "Yellow", teal: "Teal", gray: "Gray", indigo: "Indigo",
+    };
+
 class SacChipInput extends HTMLElement {
     static PALETTE_SLOTS = ["blue", "orange", "red", "green", "purple", "pink", "yellow", "teal", "gray", "indigo"];
     static get observedAttributes() { return ["disabled"]; }
@@ -81,9 +88,13 @@ class SacChipInput extends HTMLElement {
         // resize does not fire for it) — re-anchor so the list is not left
         // underneath the keyboard.
         window.visualViewport?.addEventListener("resize", this._onReposition);
+        // Runtime language switch: relabel in place — chips, typing, the
+        // open dropdown and its highlight survive.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         document.removeEventListener("pointerdown", this._onDocPointer, true);
         if (this._onReposition) {
             window.removeEventListener("scroll", this._onReposition, true);
@@ -119,8 +130,27 @@ class SacChipInput extends HTMLElement {
         return /^[a-z0-9_:-]{1,50}$/.test(trimmed) ? trimmed : "";
     }
 
+    /** The ghost button's text: the app's add-label, else the kit default. */
+    _addLabel() {
+        return this.getAttribute("add-label") || t("chip-input.add", "Add");
+    }
+
+    /** Kit strings in the current language: the ghost button's text node,
+     *  and an open dropdown re-rendered from unchanged state (query,
+     *  highlight, pending create) with its scroll kept. */
+    _relabel() {
+        if (!this._addText) return;
+        this._addText.textContent = this._addLabel();
+        if (this._open) {
+            const top = this._dropdown.scrollTop;
+            this._renderDropdown();
+            this._dropdown.scrollTop = top;
+        }
+    }
+
     _render() {
-        const addLabel = this.getAttribute("add-label") || t("chip-input.add", "Add");
+        const escText = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+        const addLabel = escText(this._addLabel());
         this.shadowRoot.innerHTML = `
             <style>
                 :host([disabled]) { opacity: .5; pointer-events: none; }
@@ -304,7 +334,7 @@ class SacChipInput extends HTMLElement {
             </style>
             <div class="row" id="row">
                 <button type="button" class="add-btn" id="add-btn">
-                    <span class="plus">+</span> ${addLabel}
+                    <span class="plus">+</span><span class="add-text">${addLabel}</span>
                 </button>
                 <input class="entry" id="entry" autocomplete="off" hidden/>
             </div>
@@ -314,6 +344,7 @@ class SacChipInput extends HTMLElement {
         this._entry = this.shadowRoot.getElementById("entry");
         this._entry.disabled = this.disabled;
         this._addBtn = this.shadowRoot.getElementById("add-btn");
+        this._addText = this._addBtn.querySelector(".add-text");
         this._dropdown = this.shadowRoot.getElementById("dropdown");
 
         this._addBtn.addEventListener("click", () => {
@@ -513,7 +544,7 @@ class SacChipInput extends HTMLElement {
         const hint = esc(t("chip-input.pick-color", 'Pick color for "{name}"'))
             .replace("{name}", this._creating);
         const swatches = slots.map(c =>
-            `<button type="button" class="swatch-btn" data-color="${c}" style="background:var(--palette-${c})" title="${c}"></button>`
+            `<button type="button" class="swatch-btn" data-color="${c}" style="background:var(--palette-${c})" title="${esc(t(`chip-input.color-${c}`, SLOT_NAMES[c] || c)).replace(/"/g, "&quot;")}"></button>`
         ).join("");
         this._dropdown.innerHTML = `
             <div class="picker-header">${hint}</div>

@@ -135,8 +135,11 @@
  * menu item clicks the original button, so its handlers run unchanged. The
  * buttons are hidden with [data-sac-overflow] (ui.css), never moved.
  * Candidates are the button/a elements in the toolbar slot (directly, or one
- * level inside a wrapper element) and the host tools. Mark a control
- * data-overflow="never" to keep it in the ribbon. Needs sac-menu loaded;
+ * level inside a wrapper element), the host tools, and a <sac-menu> there —
+ * folded as ONE item: its entries join the "…" menu as a group (after a
+ * separator), and choosing one fires the original menu's sac:select, so the
+ * app's listener runs unchanged. Mark a control data-overflow="never" to
+ * keep it in the ribbon. Needs sac-menu loaded;
  * without it nothing overflows.
  *
  * Layout contract: content below needs padding-top: 50px plus the top safe
@@ -148,6 +151,18 @@
      *  the component runs standalone. */
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
+    /** The nav's own strings — English fallbacks. Rendered nodes carry their
+     *  key (data-i18n → text, data-i18n-label → aria-label, data-i18n-title
+     *  → title) so a language switch rewrites them in place. */
+    const STRINGS = {
+        "nav.home":        "Home",
+        "nav.host":        "Host",
+        "nav.menu":        "Menu",
+        "nav.more":        "More",
+        "nav.no-sections": "No sections yet.",
+    };
+    const str = (key) => t(key, STRINGS[key]);
 
 class SacNav extends HTMLElement {
     static get observedAttributes() { return ["host-href", "host-label", "host-icon", "host-nav", "sections-nav", "rail", "compact-title"]; }
@@ -235,6 +250,11 @@ class SacNav extends HTMLElement {
         // Toolbar overflow follows the nav's real width and its content.
         this._ro = new ResizeObserver(() => this._scheduleOverflow());
         this._ro.observe(this);
+        // The toolbar grows after the first layout — icons upgrade, a menu
+        // trigger renders, web fonts arrive — while the nav keeps its width.
+        // Measure again once the fonts are in; the toolbar itself is observed
+        // in _layoutOverflow().
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this._scheduleOverflow());
         this._mo = new MutationObserver(() => {
             // Panel content added or removed: the burger may appear or go.
             if (!!this.querySelector(':scope > [slot="panel"]') !== !!this._hasSlotted) this.render();
@@ -251,6 +271,21 @@ class SacNav extends HTMLElement {
             attributes: true, attributeFilter: ["hidden", "disabled", "title", "aria-label"] });
         this.render();
         this.attachPersistentHandlers();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    /**
+     * Language switch: the nav's own strings, in place — no render(), so an
+     * open panel or drawer, the "…" menu, focus and the overflow layout all
+     * survive. Host, brand, route and section labels are the app's / host's.
+     */
+    _relabel() {
+        const sr = this.shadowRoot;
+        sr.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = str(el.dataset.i18n); });
+        sr.querySelectorAll("[data-i18n-label]").forEach((el) => el.setAttribute("aria-label", str(el.dataset.i18nLabel)));
+        sr.querySelectorAll("[data-i18n-title]").forEach((el) => el.setAttribute("title", str(el.dataset.i18nTitle)));
+        // A shorter or longer label can change what fits in the ribbon.
+        this._scheduleOverflow();
     }
 
     attributeChangedCallback() {
@@ -259,6 +294,7 @@ class SacNav extends HTMLElement {
     }
 
     disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
         if (this._escHandler)   document.removeEventListener("keydown", this._escHandler);
         if (this._hashHandler)  window.removeEventListener("hashchange", this._hashHandler);
         if (this._routeHandler) window.removeEventListener("sac:route-registered", this._routeHandler);
@@ -351,11 +387,14 @@ class SacNav extends HTMLElement {
         const esc = (s) => String(s).replace(/"/g, "&quot;");
         const escText = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
         const L = {
-            menu:       esc(t("nav.menu", "Menu")),
-            home:       esc(t("nav.home", "Home")),
-            more:       esc(t("nav.more", "More")),
-            noSections: escText(t("nav.no-sections", "No sections yet.")),
+            menu:       esc(str("nav.menu")),
+            home:       esc(str("nav.home")),
+            more:       esc(str("nav.more")),
+            noSections: escText(str("nav.no-sections")),
         };
+        // A kit default (not the host's own label) carries its key for _relabel().
+        const keyTitle = hostLabel ? `` : ` data-i18n-title="nav.home"`;
+        const keyText  = (key) => hostLabel ? `` : ` data-i18n="${key}"`;
 
         this.shadowRoot.innerHTML = `
             <style>
@@ -782,12 +821,12 @@ class SacNav extends HTMLElement {
             </style>
             <nav class="ribbon${titled ? " titled" : ""}">
                 ${showBurger ? `
-                <button class="menu-btn" aria-label="${L.menu}" aria-expanded="false">
+                <button class="menu-btn" aria-label="${L.menu}" data-i18n-label="nav.menu" aria-expanded="false">
                     <span></span><span></span><span></span>
                 </button>` : ``}
                 ${hostHref ? `
                 <a class="brand host-jump" href="${hostHref.replace(/"/g, "&quot;")}"
-                   title="${(hostLabel || "Home").replace(/"/g, "&quot;")}">
+                   title="${esc(hostLabel || L.home)}"${keyTitle}>
                     <span class="brand-mark"><sac-icon name="${hostIcon}"></sac-icon></span>
                     ${hostLabel ? `<span class="host-label">${hostLabel}</span>` : ``}
                 </a>` : ``}
@@ -799,7 +838,7 @@ class SacNav extends HTMLElement {
                 ${compactTitle ? `
                 <div class="compact-id">
                     ${hostHref ? `
-                    <a class="cid-home" href="${esc(hostHref)}" title="${esc(hostLabel || L.home)}"><sac-icon name="${esc(hostIcon)}"></sac-icon><span class="cid-home-label">${escText(hostLabel || t("nav.home", "Home"))}</span></a>` : ``}
+                    <a class="cid-home" href="${esc(hostHref)}" title="${esc(hostLabel || L.home)}"${keyTitle}><sac-icon name="${esc(hostIcon)}"></sac-icon><span class="cid-home-label"${keyText("nav.home")}>${escText(hostLabel || str("nav.home"))}</span></a>` : ``}
                     <a class="compact-title${titleAccent ? " app-name" : ""}" href="${hrefFor(brandHref)}">
                         ${brandIcon ? `<span class="cid-icon"><sac-icon name="${esc(brandIcon)}"></sac-icon></span>` : ``}
                         <span class="cid-text">${compactTitle}</span>
@@ -814,7 +853,7 @@ class SacNav extends HTMLElement {
                 ${hostTools.length ? `
                 <div class="host-tools"><slot name="host-tools"></slot></div>` : ``}
                 <sac-menu class="more" hidden>
-                    <button slot="trigger" class="more-btn" type="button" aria-label="${L.more}" title="${L.more}">
+                    <button slot="trigger" class="more-btn" type="button" aria-label="${L.more}" title="${L.more}" data-i18n-label="nav.more" data-i18n-title="nav.more">
                         <sac-icon name="more"></sac-icon>
                     </button>
                 </sac-menu>
@@ -826,7 +865,7 @@ class SacNav extends HTMLElement {
                      settings…) — first, above the navigation groups. -->
                 <div class="panel-slot"><slot name="panel"></slot></div>
                 ${(panelHostHref || panelHostNav.length) ? `
-                <div class="panel-label">${escText(hostLabel || t("nav.host", "Host"))}</div>
+                <div class="panel-label"${keyText("nav.host")}>${escText(hostLabel || str("nav.host"))}</div>
                 <ul class="nav-list">
                     ${panelHostHref ? `
                     <li>
@@ -836,7 +875,7 @@ class SacNav extends HTMLElement {
                              its own group. Same data the ribbon jump already has. -->
                         <a class="nav-item ${isActiveHref(panelHostHref) ? "active" : ""}" href="${esc(panelHostHref)}">
                             <sac-icon name="${esc(hostIcon)}"></sac-icon>
-                            <span>${escText(t("nav.home", "Home"))}</span>
+                            <span data-i18n="nav.home">${escText(str("nav.home"))}</span>
                         </a>
                     </li>` : ``}
                     ${panelHostNav.map(e => {
@@ -866,7 +905,7 @@ class SacNav extends HTMLElement {
                 ${routes.length ? `<hr class="panel-sep">${(appName || brand)
                     ? `<div class="panel-label">${escText(appName || brand)}</div>` : ``}` : ``}` : ``}
                 ${routes.length === 0
-                    ? ((panelHostHref || panelHostNav.length || sections.length || hasSlotted || compact) ? `` : `<div class="panel-empty">${L.noSections}</div>`)
+                    ? ((panelHostHref || panelHostNav.length || sections.length || hasSlotted || compact) ? `` : `<div class="panel-empty" data-i18n="nav.no-sections">${L.noSections}</div>`)
                     : `<ul class="nav-list">
                          ${routes.map(r => `
                              <li>
@@ -941,11 +980,17 @@ class SacNav extends HTMLElement {
         });
         backdrop.addEventListener("click", () => this._closeAll());
 
-        // The "…" toolbar overflow menu clicks the original control.
+        // The "…" toolbar overflow menu clicks the original control — or, for
+        // an entry of a folded <sac-menu>, fires that menu's own sac:select.
         const more = this.shadowRoot.querySelector(".more");
         more.addEventListener("sac:select", (e) => {
-            const el = this._overflowed[Number(e.detail && e.detail.action)];
-            if (el && el.isConnected) el.click();
+            e.stopPropagation();
+            const entry = this._moreEntries && this._moreEntries[Number(e.detail && e.detail.action)];
+            if (!entry || !entry.el.isConnected) return;
+            if (entry.action == null) { entry.el.click(); return; }
+            entry.el.dispatchEvent(new CustomEvent("sac:select", {
+                detail: { action: entry.action }, bubbles: true, composed: true,
+            }));
         });
 
         // Clicking a panel nav-item closes the panel — and so do the ribbon's
@@ -1164,7 +1209,7 @@ class SacNav extends HTMLElement {
     /** Toolbar controls that may move into the "…" menu, in ribbon order. */
     _overflowCandidates() {
         const out = [];
-        const isControl = (el) => el.matches("button, a[href]");
+        const isControl = (el) => el.matches("button, a[href], sac-menu");
         const slot = this.shadowRoot.querySelector('slot[name="toolbar"]');
         const top = [
             ...(slot ? slot.assignedElements() : []),
@@ -1188,6 +1233,15 @@ class SacNav extends HTMLElement {
 
         const items = this._overflowCandidates();
         items.forEach((el) => el.removeAttribute("data-sac-overflow"));
+        // Watch the toolbar's own boxes too: they change size without the nav
+        // doing so. The observer settles — a re-run with the same outcome
+        // leaves every box at the size it last reported.
+        const slot = sr.querySelector('slot[name="toolbar"]');
+        for (const el of [...(slot ? slot.assignedElements() : []),
+                          ...this.querySelectorAll(':scope > [slot="host-tools"]')]) {
+            if (!this._roWatched) this._roWatched = new WeakSet();
+            if (this._ro && !this._roWatched.has(el)) { this._ro.observe(el); this._roWatched.add(el); }
+        }
         more.hidden = true;
 
         const brand = sr.querySelector(".brand:not(.host-jump)");
@@ -1220,15 +1274,18 @@ class SacNav extends HTMLElement {
         }
         this._overflowed = over;
 
-        more.querySelectorAll("[data-action]").forEach((n) => n.remove());
-        over.forEach((el, i) => {
+        more.querySelectorAll("[data-action], hr").forEach((n) => n.remove());
+        // One "…" entry per control; a folded <sac-menu> contributes its own
+        // entries as a group behind a separator.
+        const entries = [];
+        const addButton = (src, label, disabled) => {
             const b = document.createElement("button");
             b.type = "button";
-            b.dataset.action = String(i);
-            if (el.disabled || el.getAttribute("aria-disabled") === "true") b.disabled = true;
-            const icon = el.querySelector("sac-icon");
-            const avatar = el.querySelector("sac-avatar");
-            const svg = el.querySelector("svg");
+            b.dataset.action = String(entries.length - 1);
+            if (disabled) b.disabled = true;
+            const icon = src.querySelector("sac-icon");
+            const avatar = src.querySelector("sac-avatar");
+            const svg = src.querySelector("svg");
             if (icon) {
                 const ic = document.createElement("sac-icon");
                 ic.setAttribute("name", icon.getAttribute("name") || "");
@@ -1238,10 +1295,27 @@ class SacNav extends HTMLElement {
             } else if (svg) {
                 b.appendChild(svg.cloneNode(true));
             }
-            const label = el.textContent.trim() || el.getAttribute("aria-label") || el.title || "";
             b.appendChild(document.createTextNode(label));
             more.appendChild(b);
+        };
+        over.forEach((el) => {
+            if (el.localName === "sac-menu") {
+                const items = [...el.children].filter((c) =>
+                    c.matches("button[data-action]") && c.getAttribute("slot") !== "trigger");
+                if (!items.length) return;
+                if (more.querySelector("[data-action]")) more.appendChild(document.createElement("hr"));
+                items.forEach((item) => {
+                    entries.push({ el, action: item.dataset.action });
+                    addButton(item, item.textContent.trim() || item.getAttribute("aria-label") || item.title || "",
+                        item.disabled);
+                });
+                return;
+            }
+            entries.push({ el, action: null });
+            addButton(el, el.textContent.trim() || el.getAttribute("aria-label") || el.title || "",
+                el.disabled || el.getAttribute("aria-disabled") === "true");
         });
+        this._moreEntries = entries;
     }
 
     attachPersistentHandlers() {

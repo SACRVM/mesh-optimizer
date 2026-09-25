@@ -27,6 +27,10 @@
      *  the component runs standalone. */
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+    /** Timestamps follow the kit language (sac.lang.locale()), not the
+     *  browser's default locale. */
+    const stamp = (date) => date.toLocaleTimeString(
+        (window.sac && window.sac.lang) ? window.sac.lang.locale() : undefined);
 
 class SacLog extends HTMLElement {
     constructor() {
@@ -37,11 +41,16 @@ class SacLog extends HTMLElement {
 
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this.render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
     }
 
     add(text, level = "info") {
-        const ts = new Date().toLocaleTimeString();
-        const entry = { ts, text, level };
+        const date = new Date();
+        const entry = { ts: stamp(date), date, text, level };
         this.entries.push(entry);
         const body = this.shadowRoot.getElementById("body");
         if (body) {
@@ -69,9 +78,30 @@ class SacLog extends HTMLElement {
     flashCopied() {
         const btn = this.shadowRoot.getElementById("copy-btn");
         if (!btn) return;
-        const original = btn.textContent;
         btn.textContent = t("log.copied", "Copied!");
-        setTimeout(() => { btn.textContent = original; }, 1500);
+        clearTimeout(this._copiedTimer);
+        this._copiedTimer = setTimeout(() => {
+            this._copiedTimer = null;
+            btn.textContent = t("log.copy", "Copy");
+        }, 1500);
+    }
+
+    /** Language switch: header strings and every timestamp, in place —
+     *  entries, scroll position and a running "Copied!" flash survive. */
+    _relabel() {
+        const root = this.shadowRoot;
+        const head = root.querySelector(".hdr > span");
+        if (!head) return;
+        head.textContent = t("log.header", "LOG");
+        root.getElementById("copy-btn").textContent = this._copiedTimer
+            ? t("log.copied", "Copied!") : t("log.copy", "Copy");
+        root.getElementById("clear-btn").textContent = t("log.clear", "Clear");
+        const spans = root.querySelectorAll("#body .entry .ts");
+        this.entries.forEach((e, i) => {
+            if (!e.date) return;
+            e.ts = stamp(e.date);
+            if (spans[i]) spans[i].textContent = e.ts;
+        });
     }
 
     render() {

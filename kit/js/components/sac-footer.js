@@ -31,8 +31,20 @@ class SacFooter extends HTMLElement {
         this.attachShadow({ mode: "open" });
     }
 
-    connectedCallback()        { this.render(); }
+    connectedCallback() {
+        this.render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
     attributeChangedCallback() { if (this.shadowRoot.firstChild) this.render(); }
+
+    /** Language switch: only the kit's default link label is the kit's. */
+    _relabel() {
+        const a = this.shadowRoot.querySelector("a");
+        if (a && !this.getAttribute("link-label")) a.textContent = t("footer.link", "LINK");
+    }
 
     render() {
         const brand   = this.getAttribute("brand") || "";

@@ -51,6 +51,21 @@ class SacChip extends HTMLElement {
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
         else this._refresh();
+        // Runtime language switch: relabel the × in place.
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** The remove button's tooltip + aria-label in the current language. */
+    _relabel() {
+        const x = this.shadowRoot.querySelector(".x");
+        if (!x) return;
+        const text = t("chip.remove", "Remove");
+        x.title = text;
+        x.setAttribute("aria-label", text);
     }
 
     attributeChangedCallback() {

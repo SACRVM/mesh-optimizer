@@ -67,10 +67,19 @@ class SacSidebar extends HTMLElement {
         this._syncWidth();
         this.renderSidebar();
         window.addEventListener("sac:sidebar-toggle", this._onToggleEvent);
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
     }
 
     disconnectedCallback() {
         window.removeEventListener("sac:sidebar-toggle", this._onToggleEvent);
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Language switch: the rail's own landmark name. Item labels are the
+     *  app's — it re-assigns `items` in its own language handler. */
+    _relabel() {
+        const list = this.shadowRoot.getElementById("list");
+        if (list) list.setAttribute("aria-label", t("sidebar.label", "Sections"));
     }
 
     attributeChangedCallback(name, oldValue, newValue) {

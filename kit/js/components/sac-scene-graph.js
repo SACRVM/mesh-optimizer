@@ -94,6 +94,30 @@ class SacSceneItem extends HTMLElement {
 
     connectedCallback() {
         this.render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Runtime language switch: the control labels (and the "Unnamed"
+     *  placeholder) in place — no re-render, so focus and the colour
+     *  input's transient state survive. */
+    _relabel() {
+        const root = this.shadowRoot;
+        if (!root.firstChild) return;
+        const set = (sel, text) => { const el = root.querySelector(sel); if (el) el.setAttribute('aria-label', text); };
+        set('#btn-expand', t('scene.expand', 'Expand / collapse'));
+        set('#btn-visibility', t('scene.visibility', 'Toggle visibility'));
+        set('#btn-delete', t('scene.delete', 'Delete'));
+        set('#item-color', t('scene.color', 'Color'));
+        if (!this.getAttribute('label')) {
+            const unnamed = t('scene.unnamed', 'Unnamed');
+            const text = root.querySelector('#item-label');
+            if (text) text.textContent = unnamed;
+            set('.item-row', unnamed);
+        }
     }
 
     attributeChangedCallback(name) {

@@ -39,10 +39,8 @@
     sac.about = {
         open(data) {
             const m = data || {};
-            const name = m.name || "This app";
-            const title = (window.sac && sac.t)
-                ? sac.t("about.title", "About {name}").replace("{name}", name)
-                : "About " + name;
+            const name = m.name || sac.t("about.this-app", "This app");
+            const titleOf = () => sac.t("about.title", "About {name}").replace("{name}", name);
 
             // One About per subject: a second click resurfaces it, never stacks.
             const key = "about:" + name;
@@ -51,7 +49,16 @@
             if (existing) { existing.open(); existing.bringToFront?.(); return existing; }
 
             const win = document.createElement("sac-window");
-            win.setAttribute("title", title);
+            win.setAttribute("title", titleOf());
+            // An About left open follows a language switch (its title is the
+            // kit's; name and notices are the app's). Unsubscribes itself
+            // once the window is gone.
+            if (sac.lang) {
+                const off = sac.lang.onChange(() => {
+                    if (!win.isConnected) { off(); return; }
+                    win.setAttribute("title", titleOf());
+                });
+            }
             win.setAttribute("controls", "close");
             win.setAttribute("width", "440px");
             // An About is sized to its content (below) and can't be maximized —

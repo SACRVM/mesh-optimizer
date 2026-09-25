@@ -75,6 +75,22 @@ class SacToastStack extends HTMLElement {
 
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
+
+    /** Language switch: region name + every live card's close label, in
+     *  place — timers, swipes and exit animations run on untouched. */
+    _relabel() {
+        const region = this.shadowRoot.getElementById("region");
+        if (!region) return;
+        region.setAttribute("aria-label", t("toast.notifications", "Notifications"));
+        for (const btn of region.querySelectorAll(".toast .close")) {
+            btn.setAttribute("aria-label", t("toast.dismiss", "Dismiss"));
+        }
     }
 
     /**

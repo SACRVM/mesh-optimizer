@@ -72,6 +72,12 @@
  * name; the checker is --checker-a/--checker-b.
  */
 (function () {
+    /** Kit i18n: sac.t when globals.js is loaded, the English fallback when
+     *  the component runs standalone. */
+    const t = (key, fallback) =>
+        (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+    /** A kit string with {name} filled in (layer names are app data). */
+    const tn = (key, fallback, name) => t(key, fallback).replace("{name}", () => name);
     const ICON_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
     const icon = (n) => {
         const p = window.sac && sac.icons ? sac.icons.get(n) : null;
@@ -137,9 +143,37 @@
                     },
                 });
             }
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
         }
         disconnectedCallback() {
             if (this._sortable) { this._sortable.destroy(); this._sortable = null; }
+            if (this._offLang) { this._offLang(); this._offLang = null; }
+        }
+
+        /** Kit strings onto the existing nodes: the list's name (unless the
+         *  app set `label`) and the three footer actions. */
+        _labels() {
+            this._list.setAttribute("aria-label", this.getAttribute("label") || t("layer-list.layers", "Layers"));
+            const act = (action, text) => {
+                const b = this._foot.querySelector(`[data-action="${action}"]`);
+                b.title = text;
+                b.setAttribute("aria-label", text);
+            };
+            act("add",       t("layer-list.add", "Add layer"));
+            act("duplicate", t("layer-list.duplicate", "Duplicate layer"));
+            act("delete",    t("layer-list.delete", "Delete layer"));
+        }
+
+        /** Runtime language switch: every label in place via _paintRow — no
+         *  rebuild, so the active layer, focus, scroll and a rename in
+         *  progress (its typed text included) all survive. */
+        _relabel() {
+            if (!this._list) return;
+            this._labels();
+            const rows = this._rows();
+            this._layers.forEach((l, i) => { if (rows[i]) this._paintRow(rows[i], l); });
+            const input = this._list.querySelector(".name input");
+            if (input) input.setAttribute("aria-label", t("layer-list.name", "Layer name"));
         }
 
         attributeChangedCallback(name) {
@@ -148,7 +182,7 @@
             else if (name === "actions") this._syncActions();
             else if (name === "thumb-size") this._build();
             else if (name === "pixelated") this.refresh();
-            else if (name === "label") this._list.setAttribute("aria-label", this.getAttribute("label") || "Layers");
+            else if (name === "label") this._labels();
         }
 
         get layers() { return this._layers.map((l) => ({ ...l })); }
@@ -323,13 +357,13 @@
                 </style>
                 <div class="list" role="listbox"></div>
                 <div class="foot" hidden>
-                    <button class="act" data-action="add" type="button" title="Add layer" aria-label="Add layer">${icon("plus") || "+"}</button>
-                    <button class="act" data-action="duplicate" type="button" title="Duplicate layer" aria-label="Duplicate layer">${icon("copy") || "⧉"}</button>
-                    <button class="act danger" data-action="delete" type="button" title="Delete layer" aria-label="Delete layer">${icon("trash") || "×"}</button>
+                    <button class="act" data-action="add" type="button">${icon("plus") || "+"}</button>
+                    <button class="act" data-action="duplicate" type="button">${icon("copy") || "⧉"}</button>
+                    <button class="act danger" data-action="delete" type="button">${icon("trash") || "×"}</button>
                 </div>`;
             this._list = this.shadowRoot.querySelector(".list");
             this._foot = this.shadowRoot.querySelector(".foot");
-            this._list.setAttribute("aria-label", this.getAttribute("label") || "Layers");
+            this._labels();
 
             this._list.addEventListener("click", (e) => {
                 const row = e.target.closest(".row");
@@ -379,17 +413,24 @@
         /** Row state that the toggles change — no rebuild, so focus stays put. */
         _paintRow(row, l) {
             row.classList.toggle("hidden-layer", !l.visible);
-            row.setAttribute("aria-label", `${l.name}${l.visible ? "" : ", hidden"}${l.locked ? ", locked" : ""}`);
+            const state = [l.name];
+            if (!l.visible) state.push(t("layer-list.hidden", "hidden"));
+            if (l.locked)   state.push(t("layer-list.locked", "locked"));
+            row.setAttribute("aria-label", state.join(", "));
             const eye = row.querySelector(".eye");
             eye.innerHTML = icon(l.visible ? "eye" : "eye-off");
             eye.setAttribute("aria-pressed", l.visible ? "false" : "true");
-            eye.setAttribute("aria-label", l.visible ? `Hide ${l.name}` : `Show ${l.name}`);
-            eye.title = l.visible ? "Hide layer" : "Show layer";
+            eye.setAttribute("aria-label", l.visible
+                ? tn("layer-list.hide-named", "Hide {name}", l.name)
+                : tn("layer-list.show-named", "Show {name}", l.name));
+            eye.title = l.visible ? t("layer-list.hide", "Hide layer") : t("layer-list.show", "Show layer");
             const lock = row.querySelector(".lock");
             lock.innerHTML = icon(l.locked ? "lock" : "unlock");
             lock.setAttribute("aria-pressed", l.locked ? "true" : "false");
-            lock.setAttribute("aria-label", l.locked ? `Unlock ${l.name}` : `Lock ${l.name}`);
-            lock.title = l.locked ? "Unlock layer" : "Lock layer";
+            lock.setAttribute("aria-label", l.locked
+                ? tn("layer-list.unlock-named", "Unlock {name}", l.name)
+                : tn("layer-list.lock-named", "Lock {name}", l.name));
+            lock.title = l.locked ? t("layer-list.unlock", "Unlock layer") : t("layer-list.lock", "Lock layer");
         }
 
         _applyActive() {
@@ -442,7 +483,7 @@
             const input = document.createElement("input");
             input.type = "text";
             input.value = old;
-            input.setAttribute("aria-label", "Layer name");
+            input.setAttribute("aria-label", t("layer-list.name", "Layer name"));
             slot.textContent = "";
             slot.appendChild(input);
             this._editing = id;

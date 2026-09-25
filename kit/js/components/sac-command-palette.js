@@ -34,7 +34,10 @@
  *              is the app's job — sac.hotkeys.register() — because the
  *              palette must not own an app's key bindings.
  *       unregister(id)
- *       list() → the registered commands, in registration order.
+ *       list() → the registered commands, in registration order. A
+ *              command registered without a `group` lists group null — the
+ *              palette shows it under the kit's "Commands" heading, in the
+ *              current language.
  *
  * Keyboard:
  *   mod+k        — toggle (registered via sac.hotkeys, description
@@ -89,7 +92,9 @@
                     id,
                     label:  command.label != null ? String(command.label) : id,
                     icon:   command.icon || null,
-                    group:  command.group || t("palette.commands", "Commands"),
+                    // null = the kit default, resolved at display time so
+                    // the heading follows a runtime language switch.
+                    group:  command.group || null,
                     hotkey: command.hotkey || null,
                     run:    typeof command.run === "function" ? command.run : null,
                 });
@@ -144,6 +149,7 @@
             this._restoreFocus = null;
             this._unhotkey = null;
             this._ownsApi  = false;
+            this._offLang  = null;
         }
 
         connectedCallback() {
@@ -152,12 +158,17 @@
             if (window.sac && sac.hotkeys) {
                 if (!this._unhotkey) {
                     this._unhotkey = sac.hotkeys.register("mod+k", () => this.toggle(), {
-                        description: t("palette.title", "Command palette"),
+                        // A function: listings resolve it in the current language.
+                        description: () => t("palette.title", "Command palette"),
                     });
                 }
             } else {
                 console.warn("[sac-command-palette] sac.hotkeys is not loaded — " +
                              "mod+k is unbound. Load kit/js/lib/hotkeys.js before the components.");
+            }
+
+            if (window.sac && sac.lang && !this._offLang) {
+                this._offLang = sac.lang.onChange(() => this._relabel());
             }
 
             // First connected instance owns the shorthand API.
@@ -180,6 +191,7 @@
 
         disconnectedCallback() {
             if (this._unhotkey) { this._unhotkey(); this._unhotkey = null; }
+            if (this._offLang)  { this._offLang();  this._offLang  = null; }
             if (this._ownsApi && window.sac) { sac.palette = null; this._ownsApi = false; }
             this.close();
         }
@@ -224,17 +236,50 @@
             else this.open();
         }
 
+        /**
+         * Runtime language switch: the chrome strings in place; while open,
+         * the entries are re-collected (group headings are kit strings) and
+         * re-filtered with the typed query — the selected row stays selected.
+         */
+        _relabel() {
+            if (!this.shadowRoot.firstChild) return;
+            const panel = this.shadowRoot.querySelector(".panel");
+            panel.setAttribute("aria-label", t("palette.title", "Command palette"));
+            this._input.setAttribute("placeholder", t("palette.placeholder", "Type a command…"));
+            this._input.setAttribute("aria-label", t("palette.search", "Search commands"));
+            this._list.setAttribute("aria-label", t("palette.commands", "Commands"));
+            this._empty.textContent = t("palette.empty", "No matching commands");
+            if (!this.hasAttribute("open")) return;
+
+            const selected = this._visible[this._index];
+            const scroll = this._list.scrollTop;
+            const oldEntries = this._entries;
+            this._entries = this._collect();
+            this._apply(this._input.value);
+            // Entries are rebuilt, so find the old selection by position in
+            // the (unchanged) source order.
+            const at = selected ? oldEntries.indexOf(selected) : -1;
+            const again = at !== -1 ? this._entries[at] : null;
+            const row = again ? this._visible.indexOf(again) : -1;
+            if (row !== -1) this._select(row);
+            this._list.scrollTop = scroll;
+        }
+
         /* ------------------------------------------------------- sources */
 
         /** Merge the three sources. Called on every open — never cached. */
         _collect() {
             const entries = [];
 
-            // 1. Views — every labelled route.
+            // 1. Views — every labelled route, under its own palette group
+            //    when it names one (sac.apps files app routes under "Apps");
+            //    palette: false keeps a route out.
             const router = window.sac && sac.router;
             if (router && typeof router.routes === "function") {
                 for (const route of router.routes()) {
-                    if (!route || !route.label) continue;
+                    if (!route || !route.label || route.palette === false) continue;
+                    const group = typeof route.palette === "function" ? route.palette()
+                        : route.palette || t("palette.group-views", "Views");
                     const hash = route.hash;
                     // A "route" can be a real hash destination OR an external
                     // link the nav panel also lists (Download, Source). Running
@@ -242,7 +287,7 @@
                     // hash and bounce home — open it as a link instead.
                     const isExternal = /^[a-z][a-z0-9+.-]*:/i.test(hash) && !hash.startsWith("#");
                     entries.push({
-                        group: t("palette.group-views", "Views"),
+                        group: String(group),
                         label: String(route.label),
                         icon:  route.icon || null,
                         hotkey: null,

@@ -26,9 +26,19 @@ class SacLoader extends HTMLElement {
         this.attachShadow({ mode: "open" });
     }
 
-    connectedCallback() { this.render(); }
+    connectedCallback() {
+        this.render();
+        if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+    }
+    disconnectedCallback() {
+        if (this._offLang) { this._offLang(); this._offLang = null; }
+    }
 
-    show(title = t("loader.loading", "Loading..."), subtitle = "") {
+    show(title, subtitle = "") {
+        // No title given: the kit's own "Loading..." — relabelled on a
+        // language switch; a caller's title is the caller's.
+        this._autoTitle = title == null;
+        if (this._autoTitle) title = t("loader.loading", "Loading...");
         this.render(title, subtitle);
         const overlay = this.shadowRoot.querySelector(".overlay");
         if (overlay) {
@@ -45,6 +55,12 @@ class SacLoader extends HTMLElement {
         if (!overlay) return;
         overlay.style.opacity = "0";
         setTimeout(() => { overlay.style.display = "none"; }, 300);
+    }
+
+    /** Language switch: swap the default title in place (overlay state kept). */
+    _relabel() {
+        const el = this.shadowRoot.querySelector(".title");
+        if (el && this._autoTitle) el.textContent = t("loader.loading", "Loading...");
     }
 
     render(title = "", subtitle = "") {

@@ -108,6 +108,11 @@
  * poles, visible over any art. The pixels themselves are data.
  */
 (function () {
+    /** Kit i18n: sac.t when globals.js is loaded, the English fallback when
+     *  the component runs standalone. */
+    const t = (key, fallback) =>
+        (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
     const LADDER = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
     const PAD = 24;                 // fit() leaves this much ground around the sprite
     const KEEP = 32;                // a pan always leaves this much sprite on screen
@@ -204,7 +209,14 @@
             this._onKey = (e) => this._key(e);
             window.addEventListener("keydown", this._onKey);
             window.addEventListener("keyup", this._onKey);
+            if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
             this._resize();
+        }
+
+        /** Runtime language switch: the one kit string is the canvas's
+         *  accessible name — an attribute, so view and drawing are untouched. */
+        _relabel() {
+            if (this._top) this._top.setAttribute("aria-label", t("pixel-canvas.label", "Pixel canvas"));
         }
 
         disconnectedCallback() {
@@ -213,6 +225,7 @@
             if (this._mq) this._mq.removeEventListener("change", this._onScheme);
             window.removeEventListener("keydown", this._onKey);
             window.removeEventListener("keyup", this._onKey);
+            if (this._offLang) { this._offLang(); this._offLang = null; }
         }
 
         attributeChangedCallback(name) {
@@ -281,7 +294,7 @@
             this._stage = this.shadowRoot.querySelector(".stage");
             this._base = this.shadowRoot.querySelector(".base");
             this._top = this.shadowRoot.querySelector(".top");
-            this._top.setAttribute("aria-label", "Pixel canvas");
+            this._top.setAttribute("aria-label", t("pixel-canvas.label", "Pixel canvas"));
 
             const top = this._top;
             top.addEventListener("pointerdown", (e) => this._down(e));
