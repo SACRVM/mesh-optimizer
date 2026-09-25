@@ -140,8 +140,8 @@ Repair are collapsible `sac-section`s; their folded state is kept in
 `context.fs` ("sections", via `data-fold`), outside the shared settings
 snippet.
 
-Waiting on the **desktop host** to re-vendor 2.12.0 (hosted, the app runs on
-the host's kit, so these would break there before it does):
+Ready now (the desktop host runs 2.12.0 too), but shared across the four
+DREAM-TOOLS-born apps — change them in all four at once:
 - `sac-menu` folding in the toolbar overflow → then the
   `data-overflow="never"` pin on the OBJ button can go.
 - `.on-viewport` on `sac-drop-zone` → then the six token overrides in the
