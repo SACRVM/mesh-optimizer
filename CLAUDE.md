@@ -80,6 +80,27 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
    short labels and data readouts only — every explanation goes into the Help
    window.
 
+8. **View reset:** every app with a zoomable / orbitable view has a
+   `nav-icon-btn` with icon `fit` in its app-specific icon group.
+9. **Unsaved work is guarded** where the user edits something (not for pure
+   parameter apps): `context.setDirty` on the first edit, cleared after a
+   successful save; replacing a dirty document asks `sac.dialog.confirm`
+   ("Discard unsaved changes?"). Never the native `confirm()`.
+10. **Keyboard through `sac.hotkeys` only** — no raw keydown listeners for
+    shortcuts; apps with more than Open/Save get a `keyboard` button and the
+    `?` key opening a `sac-shortcut-sheet`. Hold-keys (Space to pan) stay
+    manual until the kit supports them.
+11. **Feedback is visible:** results and warnings go to `sac.toast`, work that
+    blocks for more than a moment shows a busy overlay — never console only.
+12. **Kit controls with their limits:** `sac-stepper` only for short integers
+    (its value field is 3ch wide); decimals stay kit-styled number inputs.
+    Slider readouts carry a unit or named steps, never a bare technical number.
+13. **Theme toggle** (`sac-theme-toggle` in the nav's `context` slot) only
+    standalone — removed when `context.host` is set.
+14. **Settings migrations** go through the snippet's `_migrateSettings(saved)`
+    hook (sync, returns the migrated object) — the `_restoreSettings` snippet
+    stays byte-identical in all four apps.
+
 **Language:** chat in German, code/docs/commits in English.
 
 ## Firepit inbox
