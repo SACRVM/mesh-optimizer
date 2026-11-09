@@ -5,8 +5,10 @@ build step. Built on [SACRVM APPKIT](https://github.com/SACRVM/sacrvm-appkit);
 runs standalone or as an app on a SACRVM desktop.
 
 ```bash
-npx serve .
+python3 -m http.server 3343
 ```
+
+Then open http://localhost:3343/.
 
 ## What it does
 
