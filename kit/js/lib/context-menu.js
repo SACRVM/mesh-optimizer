@@ -17,8 +17,11 @@
  *   took the event (preventDefault), the click that follows the lift is
  *   eaten. Text fields keep the browser's own long-press (selection,
  *   paste). Opt out for a subtree with [data-no-long-press] — a canvas you
- *   paint on with a still finger. Tiles being arranged ([data-arranging])
- *   are out too: a press is a drag there.
+ *   paint on with a still finger: there a touch / pen long-press opens no
+ *   menu at all, neither the kit's nor the browser's own (Chrome on Android
+ *   and Windows fires one; it is dropped). A mouse right-click and Shift+F10
+ *   still open the menu. Tiles being arranged ([data-arranging]) are out
+ *   too: a press is a drag there.
  *
  * sac.contextMenu — a surface's menu
  *
@@ -87,13 +90,20 @@
         window.__sacLongPress = true;
         let press = null;            // { id, x, y, target, timer, native }
         let synthAt = 0;             // when the kit last fired one
+        let quiet = null;            // a touch/pen press inside [data-no-long-press]: { id, until }
 
         const end = () => { if (press) { clearTimeout(press.timer); press = null; } };
+        // The press is over; the browser's own long-press menu may still come
+        // on the lift (Chrome on Windows does), so stay quiet a moment longer.
+        const lift = (e) => { if (quiet && e.pointerId === quiet.id) quiet.until = Date.now() + 600; };
 
         document.addEventListener("pointerdown", (e) => {
             end();
+            quiet = null;
             if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
-            if (!e.isPrimary || keepsNative(e) || inside(e, "[data-no-long-press], [data-arranging]")) return;
+            if (!e.isPrimary || keepsNative(e)) return;
+            if (inside(e, "[data-no-long-press]")) { quiet = { id: e.pointerId, until: Infinity }; return; }
+            if (inside(e, "[data-arranging]")) return;
             const target = origin(e);
             const p = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.screenX, sy: e.screenY, target };
             p.timer = setTimeout(() => {
@@ -124,12 +134,19 @@
         document.addEventListener("pointermove", (e) => {
             if (press && e.pointerId === press.id && Math.hypot(e.clientX - press.x, e.clientY - press.y) > PRESS_SLOP) end();
         }, true);
-        document.addEventListener("pointerup", end, true);
-        document.addEventListener("pointercancel", end, true);
+        document.addEventListener("keydown", () => { quiet = null; }, true);   // Shift+F10 / Menu key always open
+        document.addEventListener("pointerup", (e) => { end(); lift(e); }, true);
+        document.addEventListener("pointercancel", (e) => { end(); lift(e); }, true);
         // The browser's own long-press contextmenu: if it comes first, ours
         // stands down; if ours came first, the late native one is dropped.
+        // Inside [data-no-long-press] it is dropped too: a still finger on a
+        // canvas paints, it opens no menu (a mouse right-click still does —
+        // any mouse press clears `quiet`).
         window.addEventListener("contextmenu", (e) => {
             if (!e.isTrusted) return;
+            if (quiet && Date.now() < quiet.until && e.pointerType !== "mouse") {
+                e.preventDefault(); e.stopImmediatePropagation(); return;
+            }
             if (press) { end(); return; }
             if (Date.now() - synthAt < 1000) { e.preventDefault(); e.stopImmediatePropagation(); }
         }, true);

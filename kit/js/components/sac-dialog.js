@@ -76,8 +76,10 @@
  *
  * Dismissal (Escape, a backdrop tap, pulling the bottom sheet down):
  *   - All three go through beforeAction(null, { via }) first.
- *   - Edit guard: once a field in the body has been edited since open() — an
- *     input, change or sac:change event from the body — the backdrop and the
+ *   - Edit guard: once a field in the body has been edited since open() — a
+ *     beforeinput (typing, paste, delete — also inside kit fields, which stop
+ *     their native input/change), input, change or sac:change event from the
+ *     body — the backdrop and the
  *     swipe no longer dismiss: a backdrop tap only nudges the panel, a pulled
  *     sheet resists and springs back. Escape and an explicit Cancel / close
  *     button still close, so a typed text is never thrown away by a stray
@@ -124,11 +126,17 @@ class SacDialog extends HTMLElement {
         this._onKeydown = this._onKeydown.bind(this);
         // Escape from inside the dialog, bubble phase: see _onKeydown.
         this.addEventListener("keydown", (e) => this._onInnerEscape(e));
-        // The edit guard: a field in the body changed since open(). Native
-        // input/change are composed, so a kit field's inner input counts;
-        // kit fields that only speak sac:change count through that.
+        // The edit guard: a field in the body changed since open(). The kit's
+        // own fields (colour, number, date, time, select) STOP the native
+        // input/change at their inner input and speak only sac:change — and
+        // not even that while they hold invalid text. beforeinput is the one
+        // signal none of them stops: composed, fired for every keystroke,
+        // paste, cut and delete in any text control or contenteditable. So it
+        // counts too (a select's typed filter included — harmless: the guard
+        // only holds back the backdrop and the swipe). input / change /
+        // sac:change cover plain controls, pickers, toggles and steppers.
         const edited = () => { if (this.hasAttribute("open") && !this._resolved) this._edited = true; };
-        for (const type of ["input", "change", "sac:change"]) this.addEventListener(type, edited);
+        for (const type of ["beforeinput", "input", "change", "sac:change"]) this.addEventListener(type, edited);
     }
 
     /** True once a field in the body was edited since open() (see Dismissal). */
@@ -374,11 +382,31 @@ class SacDialog extends HTMLElement {
      *  land; an async answer is the app's own to show. */
     _dismiss(via) {
         if (this._resolved || this._asking) return;
-        if (via !== "escape" && !this._lightDismiss()) { this._nudge(); return; }
+        // A backdrop tap judges what the fields hold right now: the focused
+        // one commits first (see _commitFocused), and gets focus back when
+        // the dialog stays. Escape needs no commit — it closes regardless.
+        const refocus = via === "escape" ? () => {} : this._commitFocused();
+        if (via !== "escape" && !this._lightDismiss()) { this._nudge(); refocus(); return; }
         const ok = this._askDismiss(via);
         if (ok === true) this.close(null);
-        else if (ok === false) this._nudge();
-        else ok.then((yes) => { if (yes && !this._resolved) this.close(null); });
+        else if (ok === false) { this._nudge(); refocus(); }
+        else ok.then((yes) => { if (yes && !this._resolved) this.close(null); else refocus(); });
+    }
+
+    /** Before a light dismissal is judged, the focused field inside commits
+     *  what it holds: a kit field commits on blur, and until then a typed or
+     *  arrow-stepped value has sent no event the edit guard could see (the
+     *  backdrop's mousedown and the sheet's pointerdown keep focus where it
+     *  is). Returns a function that puts focus back, for when the dialog
+     *  stays open. */
+    _commitFocused() {
+        let el = document.activeElement;
+        if (!el || el === this || !this.contains(el)) return () => {};
+        while (el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+        el.blur();
+        return () => {
+            if (this.isConnected && !this._resolved && el.isConnected) el.focus({ preventScroll: true });
+        };
     }
 
     /** A short give of the panel (Bootstrap's "static backdrop" cue): the
@@ -776,8 +804,10 @@ class SacDialog extends HTMLElement {
                 place(y);
             }
             e.currentTarget.setPointerCapture(e.pointerId);
-            // free = the swipe may dismiss at all (the edit guard).
-            drag = { id: e.pointerId, y0: e.clientY - this._sheetY, track: m.tracker(), free: this._lightDismiss() };
+            // free = the swipe may dismiss at all (the edit guard) — judged
+            // after the focused field has committed what it holds.
+            const refocus = this._commitFocused();
+            drag = { id: e.pointerId, y0: e.clientY - this._sheetY, track: m.tracker(), free: this._lightDismiss(), refocus };
             drag.track.add(this._sheetY, e.timeStamp);
             e.preventDefault();
         };
@@ -795,6 +825,7 @@ class SacDialog extends HTMLElement {
             if (!drag || e.pointerId !== drag.id) return;
             const v = e.type === "pointerup" ? drag.track.velocity(e.timeStamp) : 0;
             const free = drag.free;
+            const refocus = drag.refocus;
             drag = null;
             if (this._resolved) return;
             const m = SacDialog._motion();
@@ -821,7 +852,9 @@ class SacDialog extends HTMLElement {
             });
             if (pending) pending.then((yes) => {
                 if (yes && !this._resolved) { this._swiped = true; this.close(null); }
+                else refocus();
             });
+            else if (!dismiss) refocus();     // it springs back: focus returns to the field
         };
         for (const g of grips) {
             if (!g) continue;

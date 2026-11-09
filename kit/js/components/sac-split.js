@@ -124,6 +124,12 @@
  * CSS custom properties:
  *   --split-divider — hit-area thickness of the divider (default 9px). The
  *                     hairline stays 1px; this is the grab zone.
+ *   --split-back-height — READ it, don't set it: the back bar's height while
+ *                     the bar shows (collapsed, show="end", no no-back), else
+ *                     0px. Inherited by everything in both panels, so a sticky
+ *                     header or toolbar in the detail sits right below the bar:
+ *                     `position: sticky; top: var(--split-back-height, 0px)`.
+ *                     It follows the bar (44px button on touch, 36px else).
  *
  * Sizing: the host is width/height 100% and does not scroll — give it a parent
  * with a real size (a flex child, a fixed-height box, .main-layout, …).
@@ -677,6 +683,14 @@ class SacSplit extends HTMLElement {
                 :host {
                     /* Grab zone. The hairline inside stays 1px whatever this is. */
                     --split-divider: 9px;
+                    /* The back bar: its button, and the bar's whole height
+                       (button + 0.35rem above and below + the 1px line).
+                       --split-back-height is 0px unless the bar shows, and is
+                       inherited by everything in the panels, so a sticky
+                       header in the detail sits at top: var(--split-back-height). */
+                    --_back-button: 36px;
+                    --_back-bar: calc(var(--_back-button) + 0.7rem + 1px);
+                    --split-back-height: 0px;
 
                     display: flex;
                     flex-direction: row;
@@ -812,11 +826,16 @@ class SacSplit extends HTMLElement {
                 :host([collapsed][show="end"]) .end { touch-action: pan-y pinch-zoom; }
 
                 .back { display: none; }
+                :host([collapsed][show="end"]:not([no-back]):not([rail-start])) {
+                    --split-back-height: var(--_back-bar);
+                }
                 :host([collapsed][show="end"]:not([no-back])) .back {
                     display: flex;
                     position: sticky;
                     top: 0;
                     z-index: 1;
+                    box-sizing: border-box;
+                    height: var(--_back-bar);
                     align-items: center;
                     padding: 0.35rem 0.5rem;
                     background: var(--glass-strong);
@@ -828,7 +847,7 @@ class SacSplit extends HTMLElement {
                     display: inline-flex;
                     align-items: center;
                     gap: 0.25rem;
-                    min-height: 36px;
+                    min-height: var(--_back-button);
                     padding: 0 0.6rem 0 0.25rem;
                     border: none;
                     border-radius: var(--radius-m);
@@ -846,7 +865,7 @@ class SacSplit extends HTMLElement {
                     outline-offset: -2px;
                 }
                 @media (pointer: coarse) {
-                    .back button { min-height: 44px; }
+                    :host { --_back-button: 44px; }
                     /* A finger needs more than 9px: an invisible halo widens
                        the grab zone without moving the layout math. */
                     .divider::after { content: ""; position: absolute; inset: 0 -12px; }

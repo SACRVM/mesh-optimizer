@@ -150,7 +150,7 @@ Shared by the four apps that came out of DREAM TOOLS — keep identical.
 
 ## Open items
 
-Kit 2.36.0 is vendored (2026-11-09; before that 2.12.0). View settings
+Kit 2.37.0 is vendored (2026-11-09; before that 2.36.0, 2.12.0). View settings
 (folded by default), Loose parts and Repair are collapsible `sac-section`s;
 their folded state is kept in `context.fs` ("sections", via `data-fold`),
 outside the shared settings snippet.
@@ -164,6 +164,9 @@ toast per `sac:rejected` (2.36). Checked and n/a here: `sac-log`,
 `sac-loader` (the busy overlay is the app's own and covers only the
 viewport), `sac-dialog` (only `sac.dialog.confirm`), explicit toast
 durations (only the engine-load error, `duration: 0` on purpose).
+2.36.1–2.37.0 needed no change: `data-no-long-press` on the viewport now also
+drops the browser's own long-press menu (2.36.2); `--split-back-height`
+(2.37) is n/a, nothing in the split is sticky.
 
 Version skew: hosted on the desktop the app runs on the host's kit, not on
 `kit/` — it can be older or newer. Check it before a hosted test:
