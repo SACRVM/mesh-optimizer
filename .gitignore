@@ -12,3 +12,7 @@ Thumbs.db
 .claude/settings.local.json
 .claude/*.lock
 .claude/agent-memory/
+
+# Local MCP config (Firepit): per machine, not project material.
+# Commit it only if a server in it is needed to run this repo.
+.mcp.json
