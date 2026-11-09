@@ -7,7 +7,7 @@
     "kind": "view",
     "tag": "app-mesh-optimizer",
     "entry": "app.js",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "notices": [
         {
             "title": "Three.js",

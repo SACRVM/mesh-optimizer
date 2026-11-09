@@ -38,9 +38,16 @@ Rules that keep it working on a desktop page:
   `pushState()` marks dirty, a load clears it, app.js clears it after a save).
   The engine's keys are data (`keyBindings()`); app.js registers them with
   `sac.hotkeys` while the app is on screen — never a raw `keydown` listener.
-- **`sac-stepper` has a fixed 3-character value field**, so it is used only
-  for short integers (rotation 0–345° in 15° steps, the parts threshold up to
-  999). Decimals (position, scale) stay plain number inputs.
+- **Every number is a `sac-stepper`** (convention 12): rotation 0–345° in
+  15° steps, position ±1000 in 0.01, uniform scale 0.0001–10000 in 0.0001,
+  the parts threshold up to 999. The engine listens to their `sac:change`
+  only — the inner text field's native `input` is composed and reaches the
+  host on every keystroke, before the value commits.
+- **Drops:** the empty state's zone and, over the whole viewport, an
+  `overlay` zone (kit ≥ 2.15) that shows only while a file is dragged in. The
+  overlay has no `accept`: `_openFile` names the formats on every host kit.
+  The viewport carries `data-no-long-press` (kit ≥ 2.29) and its canvas
+  `touch-action: none` (kit 2.33.1 swipes), because a held finger orbits.
 - **Keys and rendering only while on screen** (`IS_VISIBLE()`, fed by an
   IntersectionObserver): the render loop idles and the keydown handler returns
   while the view is hidden.
@@ -57,9 +64,8 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
 
 1. **Toolbar order:** Open (`btn`, icon `folder`, not primary) · main export
    (`btn primary`, icon `download`, label = format, pinned with
-   `data-overflow="never"` — the ribbon folds from the end, so an unpinned
-   primary goes into "…" on a phone while Open stays; still true on kit
-   2.12.0, whose `sac-menu` folding does not change that) · further
+   `data-overflow="never"` — the ribbon's overflow folds from the end, so an
+   unpinned primary would vanish into "…" on a phone while Open stays) · further
    formats in one `sac-menu` "More ▾" · Copy where it applies
    (`nav-icon-btn`) · app-specific icon buttons · Credits (`copyright`) · Help
    (`info`).
@@ -71,8 +77,12 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
    `.app-drop` CSS block (identical in all four `app.css`; the zone carries
    the kit's `on-viewport` class, because the viewport is black in both
    themes, plus one opaque `--glass` line — the kit's glass is translucent
-   and the scene showed through; clears the label row and the HUD). Its click / Enter go through `context.files.open`, not
-   the device picker.
+   and the scene showed through; clears the label row and the HUD). Its
+   click / Enter go through `context.files.open`, not the device picker.
+   The zone is `quiet` (kit ≥ 2.36): files it did not take get one toast
+   from the `_wireDropZone` snippet, built from `sac:rejected`'s
+   `detail.rejected` — the zone hides once a file opens, so its own line
+   would go unseen after a partial drop.
 5. **Settings are remembered:** controls with `data-keep="key"` are saved to
    `context.fs` ("settings") and replayed on mount through their kit event.
    Per-document values (e.g. a threshold fitted to one image) are not kept.
@@ -90,12 +100,14 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
    ("Discard unsaved changes?"). Never the native `confirm()`.
 10. **Keyboard through `sac.hotkeys` only** — no raw keydown listeners for
     shortcuts; apps with more than Open/Save get a `keyboard` button and the
-    `?` key opening a `sac-shortcut-sheet`. Hold-keys (Space to pan) stay
-    manual until the kit supports them.
+    `?` key opening a `sac-shortcut-sheet`. Hold-keys (Space to pan) go
+    through `sac.hotkeys.hold` (kit ≥ 2.12).
 11. **Feedback is visible:** results and warnings go to `sac.toast`, work that
     blocks for more than a moment shows a busy overlay — never console only.
-12. **Kit controls with their limits:** `sac-stepper` only for short integers
-    (its value field is 3ch wide); decimals stay kit-styled number inputs.
+12. **Kit controls with their limits:** `sac-stepper` for numbers, decimals
+    included (kit ≥ 2.12.1 sizes its field to the widest value of min/max) —
+    keep `min`/`max` tight so the pill fits a half-width panel column; it
+    snaps every value to its `step` grid.
     Slider readouts carry a unit or named steps, never a bare technical number.
 13. **Theme toggle** (`sac-theme-toggle` in the nav's `context` slot) only
     standalone — removed when `context.host` is set.
@@ -109,8 +121,9 @@ background-remover, mesh-optimizer, svg-to-3d) — keep them identical.
 
 Shared by the four apps that came out of DREAM TOOLS — keep identical.
 
-- **Dev loop:** `npx serve . -l 3343` (Firepit command "Serve"), F5. `serve.json`
-  disables caching.
+- **Dev loop:** `python3 -m http.server 3343` (Firepit command "Run site"),
+  F5. `npx serve . -l 3343` works too and reads `serve.json`, which disables
+  caching.
 - **Test both runtimes — they fail differently.** Standalone (`index.html`,
   vendored kit) AND installed on https://desktop.sacrvm.dev/ (the host's kit
   is live there; the app is injected into the host page). Recipe and a
@@ -137,19 +150,25 @@ Shared by the four apps that came out of DREAM TOOLS — keep identical.
 
 ## Open items
 
-Kit 2.12.0 is vendored. View settings (folded by default), Loose parts and
-Repair are collapsible `sac-section`s; their folded state is kept in
-`context.fs` ("sections", via `data-fold`), outside the shared settings
-snippet.
+Kit 2.36.0 is vendored (2026-11-09; before that 2.12.0). View settings
+(folded by default), Loose parts and Repair are collapsible `sac-section`s;
+their folded state is kept in `context.fs` ("sections", via `data-fold`),
+outside the shared settings snippet.
 
-The `.app-drop` block now uses `.on-viewport` plus one opaque `--glass`
-line. The OBJ button keeps its overflow pin (see convention 1). The three
-siblings were asked on 2026-09-25 to make the same change — check that
-their `.app-drop` block matches this one.
+Taken up from the releases in between: position and scale as steppers
+(2.12.1), the overlay drop zone over the viewport (2.15), `data-no-long-press`
+and `touch-action: none` on the viewport (2.29 / 2.33.1), a solid busy
+overlay under reduced transparency / more contrast (2.33), no `transition:
+all` or hover lift on the merge buttons (2.33), the quiet drop zone with one
+toast per `sac:rejected` (2.36). Checked and n/a here: `sac-log`,
+`sac-loader` (the busy overlay is the app's own and covers only the
+viewport), `sac-dialog` (only `sac.dialog.confirm`), explicit toast
+durations (only the engine-load error, `duration: 0` on purpose).
 
-Waiting on the appkit:
-- `sac-stepper` width for decimals → then positions and scale become
-  steppers too.
+Version skew: hosted on the desktop the app runs on the host's kit
+(desktop.sacrvm.dev served 2.29.0 on 2026-11-09), so the 2.36 behaviour
+(quiet zone, `detail.rejected`) appears only once `sacrvm-desktop`
+re-vendors. The snippet falls back to the bare `files` list of an older kit.
 
 Known / owner decisions open:
 - **Accent colour:** still the kit default blue (no own identity). Owner

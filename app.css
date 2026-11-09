@@ -12,6 +12,10 @@ app-mesh-optimizer .mo-root { height: 100%; min-height: 0; }
 app-mesh-optimizer .mo-split { flex: 1; min-width: 0; min-height: 0; }
 app-mesh-optimizer .mo-panel:not([open]) { border-right: none; }
 app-mesh-optimizer .mo-viewport { width: 100%; height: 100%; min-height: 0; }
+/* A finger on the viewport orbits: no browser panning, and the kit's drawer
+   and split swipes leave it alone (kit 2.33.1 — they skip touch-action:
+   none). OrbitControls sets the same on its canvas; this holds regardless. */
+app-mesh-optimizer .mo-viewport canvas { touch-action: none; }
 
 app-mesh-optimizer .mo-readout {
     font-size: 0.68rem;
@@ -57,10 +61,6 @@ app-mesh-optimizer .mo-parts-tiny .btn { width: auto; margin-left: auto; padding
     pointer-events: auto;
 }
 app-mesh-optimizer .mo-viewport.has-mesh .mo-empty { display: none; }
-app-mesh-optimizer .mo-viewport.dragover {
-    outline: 2px dashed var(--accent);
-    outline-offset: -10px;
-}
 
 /* ---- scene graph window ---- */
 app-mesh-optimizer .mo-graph-toolbar {
@@ -94,8 +94,7 @@ app-mesh-optimizer .mo-tgrid {
 }
 app-mesh-optimizer .mo-tgrid > span { font-size: 0.68rem; color: var(--text-muted); }
 app-mesh-optimizer .mo-scale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-app-mesh-optimizer .mo-tgrid input, app-mesh-optimizer .mo-scale input { padding: 4px 6px; }
-app-mesh-optimizer .mo-scale input { flex: 1 1 100%; }
+app-mesh-optimizer .mo-scale sac-stepper { flex: 1 1 100%; }
 app-mesh-optimizer .mo-scale .btn { width: auto; padding: 4px 8px; }
 
 app-mesh-optimizer .mo-help { padding: 16px; font-size: 0.85rem; line-height: 1.6; }
@@ -116,9 +115,9 @@ app-mesh-optimizer .merge-btn {
     font-weight: 700;
     font-size: 0.7rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s var(--ease-smooth);
 }
-app-mesh-optimizer .merge-btn:hover { background: var(--hover); transform: translateY(-1px); }
+app-mesh-optimizer .merge-btn:hover { background: var(--hover); }
 app-mesh-optimizer .merge-btn.p1 { border-color: var(--palette-blue); color: var(--palette-blue); }
 app-mesh-optimizer .merge-btn.p2 { border-color: var(--palette-green); color: var(--palette-green); }
 app-mesh-optimizer .merge-btn.v3 { border-color: var(--palette-purple); color: var(--palette-purple); }
@@ -164,6 +163,15 @@ app-mesh-optimizer .mo-busy {
     font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.04em;
+}
+/* Solid, like the kit's own glass, where less transparency or more contrast
+   is asked for (kit 2.33; the fallback covers an older host kit). */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    app-mesh-optimizer .mo-busy {
+        background: var(--glass-solid, var(--surface));
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
 }
 
 /* ---- touch: face / edge / vertex / part picking needs a mouse ---- */

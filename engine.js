@@ -2736,7 +2736,9 @@ class MeshPrepApp {
         // Transforms UI
         const transformInputs = ['rot-x', 'rot-y', 'rot-z', 'pos-x', 'pos-y', 'pos-z', 'scale-uniform'];
         // One undo step per burst of stepper changes (a held ± repeats every 60 ms).
-        // Rotation fields are sac-steppers (sac:change), position and scale plain number inputs.
+        // All seven are sac-steppers: sac:change only. Their inner text field's
+        // native `input` is composed and reaches the host on every keystroke,
+        // before the value commits — listening to it would push empty undo steps.
         const onTransform = () => {
             if (!this.activeObject) return;
             if (!this._transformBurst) this.pushState();
@@ -2746,7 +2748,6 @@ class MeshPrepApp {
         };
         transformInputs.forEach(id => {
             safeListen(id, 'sac:change', onTransform);
-            safeListen(id, 'input', onTransform);
         });
 
         safeListen('btn-reset-transforms', 'click', () => {

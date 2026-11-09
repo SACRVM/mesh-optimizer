@@ -135,7 +135,7 @@
             </sac-section>
         </div>
 
-        <div class="viewport mo-viewport" id="canvas-container" slot="end">
+        <div class="viewport mo-viewport" id="canvas-container" slot="end" data-no-long-press>
             <sac-hud id="selection-info" position="top-left"></sac-hud>
             <sac-hud id="mesh-stats" position="bottom-left">Faces: 0 · Verts: 0 · Open: 0</sac-hud>
             <div class="mo-busy" hidden><sac-spinner label="Working" style="--spinner-size: 28px"></sac-spinner><span class="mo-busy-label"></span></div>
@@ -143,6 +143,7 @@
                 <sac-drop-zone class="on-viewport" accept=".obj,.stl,.glb,.gltf" label="Drop a mesh" hint="or click to open"
                                touch-label="Open a mesh" touch-hint=""></sac-drop-zone>
             </div>
+            <sac-drop-zone class="mo-drop-overlay" overlay label="Drop a mesh"></sac-drop-zone>
         </div>
 
     </sac-split>
@@ -165,13 +166,13 @@
             <span>Rot X</span><sac-stepper id="rot-x" value="0" min="0" max="345" step="15" unit="°" label="Rotation X"></sac-stepper>
             <span>Rot Y</span><sac-stepper id="rot-y" value="0" min="0" max="345" step="15" unit="°" label="Rotation Y"></sac-stepper>
             <span>Rot Z</span><sac-stepper id="rot-z" value="0" min="0" max="345" step="15" unit="°" label="Rotation Z"></sac-stepper>
-            <span>Pos X</span><input type="number" id="pos-x" value="0" step="0.01" aria-label="Position X">
-            <span>Pos Y</span><input type="number" id="pos-y" value="0" step="0.01" aria-label="Position Y">
-            <span>Pos Z</span><input type="number" id="pos-z" value="0" step="0.01" aria-label="Position Z">
+            <span>Pos X</span><sac-stepper id="pos-x" value="0" min="-1000" max="1000" step="0.01" label="Position X"></sac-stepper>
+            <span>Pos Y</span><sac-stepper id="pos-y" value="0" min="-1000" max="1000" step="0.01" label="Position Y"></sac-stepper>
+            <span>Pos Z</span><sac-stepper id="pos-z" value="0" min="-1000" max="1000" step="0.01" label="Position Z"></sac-stepper>
         </div>
         <label>Uniform scale</label>
         <div class="mo-scale">
-            <input type="number" id="scale-uniform" value="1" step="0.1" min="0.0001" aria-label="Uniform scale">
+            <sac-stepper id="scale-uniform" value="1" min="0.0001" max="10000" step="0.0001" label="Uniform scale"></sac-stepper>
             <button type="button" class="btn" data-scale-mul="0.5">÷2</button>
             <button type="button" class="btn" data-scale-mul="2">×2</button>
             <button type="button" class="btn" data-scale-mul="10">×10</button>
@@ -209,7 +210,9 @@
         <p>Rotate, move and uniformly scale the active object before processing — the results
            are best on a correctly oriented, sensibly sized model. Scale works from the object's
            origin, equal in every direction; ÷2 / ×2 / ×10 fix the usual "imported 100× too
-           big" case. Rotation goes in 15° steps; position and scale take any number.</p>
+           big" case. Rotation goes in 15° steps, position in steps of 0.01 (up to ±1000), scale
+           from 0.0001 to 10000. Type a value, use ± (hold to repeat), or the arrow keys
+           (Shift for 10×).</p>
         <h3>Editing</h3>
         <p><b>1</b> face, <b>2</b> edge, <b>3</b> vertex mode: click an element for its menu
            (collapse, delete, dissolve); drag vertices to move them. <b>V</b> returns to view mode.
@@ -251,16 +254,11 @@
             this._coarse.addEventListener("change", this._onCoarse);
             this._wireDropZone((file) => this._openFile(file));
 
-            // Whole-viewport drop, for when a mesh is already loaded. The drop
-            // zone handles its own drops — ignore those here.
-            const fromZone = (e) => e.composedPath().some((n) => n.tagName === "SAC-DROP-ZONE");
-            ["dragenter", "dragover"].forEach((ev) =>
-                viewport.addEventListener(ev, (e) => { if (fromZone(e)) return; e.preventDefault(); viewport.classList.add("dragover"); }));
-            ["dragleave", "drop"].forEach((ev) =>
-                viewport.addEventListener(ev, (e) => { viewport.classList.remove("dragover"); if (fromZone(e)) return; e.preventDefault(); }));
-            viewport.addEventListener("drop", (e) => {
-                if (fromZone(e)) return;
-                const file = e.dataTransfer?.files?.[0];
+            // Whole-viewport drop: an overlay zone (kit ≥ 2.15) that covers the
+            // viewport only while a file is dragged over it, the empty state too.
+            // No accept filter: _openFile names the formats on every host kit.
+            this.querySelector(".mo-drop-overlay").addEventListener("sac:files", (e) => {
+                const file = e.detail.files[0];
                 if (file) this._openFile(file);
             });
 
@@ -480,6 +478,10 @@
         _wireDropZone(onFile) {
             const wrap = this.querySelector(".app-drop");
             const zone = wrap.querySelector("sac-drop-zone");
+            // The toast below is the one message about files not taken, so the zone
+            // keeps its own line back (kit ≥ 2.36): it hides as soon as a file opens,
+            // and a partial drop's line would sit unseen under the loaded image.
+            zone.toggleAttribute("quiet", true);
             // Click / Enter / Space open through context.files, like the Open button.
             const intercept = (e) => {
                 if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
@@ -491,7 +493,21 @@
             wrap.addEventListener("click", intercept, true);
             wrap.addEventListener("keydown", intercept, true);
             zone.addEventListener("sac:files", (e) => { const f = e.detail.files[0]; if (f) onFile(f); });
-            zone.addEventListener("sac:rejected", () => sac.toast?.("That file type does not open here.", { kind: "warn" }));
+            zone.addEventListener("sac:rejected", (e) => {
+                // Kit ≥ 2.36 pairs each file with a reason and fires for partial drops
+                // too; an older host kit sends bare files, only when none was taken.
+                const d = e.detail || {};
+                const list = d.rejected || (d.files || []).map((file) => ({ file, reason: "type" }));
+                const byType = list.filter((r) => r.reason === "type").map((r) => r.file.name);
+                const byCount = list.filter((r) => r.reason === "count").map((r) => r.file.name);
+                const lines = [];
+                if (byType.length) lines.push(byType.length === 1
+                    ? `${byType[0]} does not open here.` : `${byType.length} files do not open here.`);
+                if (byCount.length) lines.push(byCount.length === 1
+                    ? `One file at a time — ${byCount[0]} was not opened.`
+                    : `One file at a time — ${byCount.length} files were not opened.`);
+                if (lines.length) sac.toast?.(lines.join(" "), { kind: "warn" });
+            });
         }
 
         /** Ctrl+O / Ctrl+S — only while the app is on screen. */
