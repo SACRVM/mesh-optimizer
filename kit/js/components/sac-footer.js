@@ -73,6 +73,14 @@ class SacFooter extends HTMLElement {
                     margin-left: 0.5rem;
                 }
                 a:hover { color: var(--accent); }
+                /* Press: a wash the moment it goes down — the box-shadow pads
+                   it past the text without moving the line. */
+                a:active {
+                    color: var(--accent);
+                    background: var(--hover-strong);
+                    box-shadow: 0 0 0 0.25rem var(--hover-strong);
+                    border-radius: var(--radius-s);
+                }
                 @media (pointer: coarse) {
                     a { position: relative; }
                     a::after {
@@ -87,6 +95,8 @@ class SacFooter extends HTMLElement {
                 }
                 @media (hover: none) {
                     a:hover { color: inherit; }
+                    /* …but the press itself still shows (a touch is a hover too). */
+                    a:active { color: var(--accent); }
                 }
                 .version { opacity: 0.7; }
             </style>

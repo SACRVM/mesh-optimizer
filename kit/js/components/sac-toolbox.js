@@ -58,7 +58,13 @@
  * Compact/touch: under (pointer: coarse) every button grows to 44 × 44 (the
  * glyph stays the same size); under (hover: none) no hover wash sticks to a
  * tapped tool. The tooltips are the kit bubble, which has its own long-press
- * path on touch.
+ * path on touch. A tooltip nobody hovers is no label, so under (hover: none)
+ * the ACTIVE tool's name shows as a visible caption — under the grid, or at
+ * the end of a columns="row" ribbon while it fits whole (else on its own line
+ * under the ribbon, never truncated) (part "caption"; aria-hidden, the radio
+ * already carries the name). Hide it with sac-toolbox::part(caption) {
+ * display: none } where the app names the tool elsewhere. With a mouse
+ * nothing changes.
  *
  * Theming: tokens only. The active tool is --accent-fill with --on-accent ink
  * — override --accent on the element for an edit-mode ribbon, the same
@@ -220,6 +226,13 @@ class SacToolbox extends HTMLElement {
                     background: var(--accent-fill);
                     color: var(--on-accent);
                 }
+                /* Press: answers the moment it goes down; the active tool
+                   keeps its fill. Out-ranks the (hover: none) reset below.
+                   (A disabled box is pointer-events: none — never pressed.) */
+                button.tool:active:not(.active) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 button.tool:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 1px;
@@ -237,8 +250,38 @@ class SacToolbox extends HTMLElement {
                     button.tool:hover { background: transparent; color: var(--text-muted); }
                     button.tool.active:hover { background: var(--accent-fill); color: var(--on-accent); }
                 }
+                /* The active tool's name, shown where no tooltip is ever
+                   hovered. Under the grid; at the end of a row ribbon. */
+                .wrap { display: flex; flex-direction: column; gap: 4px; }
+                /* A row ribbon: the name sits at the end while it fits whole,
+                   else it wraps onto its own line under the ribbon — never
+                   cut down to a cryptic "R…". */
+                :host([columns="row"]) .wrap { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+                .caption {
+                    display: none;
+                    /* As wide as the grid, never wider: a long name must not
+                       widen the box (width 0 adds nothing to its size; the
+                       min-width then fills what the grid gave it). */
+                    width: 0;
+                    min-width: 100%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+                    font-size: 11px;
+                    font-weight: 500;
+                    line-height: 1.3;
+                    color: var(--text-muted);
+                }
+                :host([columns="row"]) .caption { width: auto; min-width: 0; flex: 0 0 auto; max-width: 100%; }
+                @media (hover: none) {
+                    .caption:not(:empty) { display: block; }
+                }
             </style>
-            <div class="grid" part="grid"></div>
+            <div class="wrap">
+                <div class="grid" part="grid"></div>
+                <div class="caption" part="caption" aria-hidden="true"></div>
+            </div>
         `;
         const grid = this.shadowRoot.querySelector(".grid");
         grid.addEventListener("click", (e) => {
@@ -311,6 +354,12 @@ class SacToolbox extends HTMLElement {
             else     btn.removeAttribute("aria-disabled");
             btn.tabIndex = off ? -1 : (on || (!anyChecked && i === 0) ? 0 : -1);
         });
+        // The caption (touch only, by CSS): the active tool's name, no key.
+        const caption = this.shadowRoot.querySelector(".caption");
+        if (caption) {
+            const tool = this._entries().find((t) => String(t.id) === value);
+            caption.textContent = tool ? String(tool.label || tool.id) : "";
+        }
     }
 
     /* --------------------------------------------------------- keyboard --- */

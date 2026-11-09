@@ -1,9 +1,9 @@
 /**
- * <sac-section title="FILTERS">
+ * <sac-section heading="FILTERS">
  *   …controls…
  * </sac-section>
  *
- * <sac-section title="View settings" collapsible collapsed remember="view">
+ * <sac-section heading="View settings" collapsible collapsed remember="view">
  *   …controls that fold away under the headline…
  * </sac-section>
  *
@@ -11,9 +11,14 @@
  * the title becomes a toggle that folds the group away.
  *
  * Attributes:
- *   title       — uppercase heading text. Rendered at --text — a group heading is
+ *   heading     — uppercase heading text. Rendered at --text — a group heading is
  *                 meant to stand out from the labels it heads (AA with room to spare;
  *                 never the tertiary --text-dim, which failed AA at this size).
+ *   title       — DEPRECATED alias of `heading` (2.36), still honoured when
+ *                 `heading` is absent. `title` is the global HTML attribute: the
+ *                 browser shows it as a native tooltip over EVERY control inside
+ *                 the section, naming the section on top of the control's own
+ *                 hint. Use `heading`; `heading` wins when both are set.
  *   collapsible — the title becomes a button (chevron, Enter/Space, aria-expanded)
  *                 that folds the body away. 44px hit target on touch.
  *   collapsed   — the folded state (reflected). Only meaningful with collapsible.
@@ -33,7 +38,7 @@
  *   chevron — the toggle's chevron (collapsible only).
  */
 class SacSection extends HTMLElement {
-    static get observedAttributes() { return ["title", "collapsible", "collapsed"]; }
+    static get observedAttributes() { return ["heading", "title", "collapsible", "collapsed"]; }
 
     constructor() {
         super();
@@ -79,6 +84,13 @@ class SacSection extends HTMLElement {
                 :host([collapsible]) .title { cursor: pointer; }
                 :host([collapsible]) .chevron { display: block; }
                 :host([collapsible]) .title:hover .chevron { color: var(--text); }
+                /* Press: a wash the moment it goes down, shaped like a tab
+                   (round on top, square on the underline). */
+                :host([collapsible]) .title:active {
+                    background: var(--hover-strong);
+                    border-radius: var(--radius-m) var(--radius-m) 0 0;
+                    transition-duration: 0s;
+                }
                 :host([collapsible]) .title:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;
@@ -89,12 +101,16 @@ class SacSection extends HTMLElement {
                 /* Height transition via the 0fr/1fr grid-row trick: no measuring.
                    The gap above the body lives inside the fold (padding), so a
                    folded section is just its underlined title. */
+                /* minmax(0, 1fr) + min-width: 0: a grid item's min-width is
+                   auto (= min-content), which would let a scrolling or
+                   ellipsizing child (a tab strip) widen the whole section. */
                 .fold {
                     display: grid;
+                    grid-template-columns: minmax(0, 1fr);
                     grid-template-rows: 1fr;
                     transition: grid-template-rows 0.2s ease, visibility 0s linear 0s;
                 }
-                .clip { min-height: 0; }
+                .clip { min-height: 0; min-width: 0; }
                 .fold.moving .clip { overflow: hidden; }
                 :host([collapsible][collapsed]) .fold {
                     grid-template-rows: 0fr;
@@ -182,7 +198,9 @@ class SacSection extends HTMLElement {
 
     _sync() {
         if (!this._title) return;
-        this._label.textContent = this.getAttribute("title") || "";
+        // `heading`, else the deprecated `title` alias (see the header).
+        this._label.textContent = this.hasAttribute("heading")
+            ? this.getAttribute("heading") : (this.getAttribute("title") || "");
         const on = this.hasAttribute("collapsible");
         if (on) {
             this._title.setAttribute("role", "button");

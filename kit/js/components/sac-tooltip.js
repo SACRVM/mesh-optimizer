@@ -423,6 +423,17 @@ class SacTooltip extends HTMLElement {
                     .bubble[data-side="right"] { transform: none; }
                     .bubble.shown { transform: none; }
                 }
+
+                /* Reduced transparency / more contrast: the bubble turns
+                   solid (the glass hue, nothing shining through) and drops
+                   the blur; under more contrast its edge becomes a clearly
+                   visible line. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .bubble { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    .bubble { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
+                }
             </style>
             <slot></slot>
             <div class="bubble" role="tooltip" part="bubble" popover="manual"></div>
@@ -563,6 +574,10 @@ customElements.define("sac-tooltip", SacTooltip);
     attach(el, text, opts = {}) {
         if (!el) return null;
         const tip = document.createElement("sac-tooltip");
+        // Out of the flow: an inline host at the end of <body> would add a
+        // line box (21px) and make a viewport-tall page scroll. The bubble
+        // is a fixed popover, so positioning is unaffected.
+        tip.style.cssText = "position:fixed;top:0;left:0";
         if (opts.placement) tip.setAttribute("placement", opts.placement);
         if (opts.distance != null) tip.setAttribute("distance", String(opts.distance));
         tip.setAttribute("content", text == null ? "" : String(text));

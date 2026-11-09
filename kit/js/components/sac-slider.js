@@ -23,6 +23,13 @@
  *   value    — get/set, reflects the attribute (string).
  *   disabled — get/set, reflects the attribute.
  *
+ * Accessibility: the range input is named by the `label` text
+ * (aria-labelledby; without a label, the host's own aria-label is copied
+ * onto it), and aria-valuetext carries what the readout shows ("40px",
+ * "Medium"), kept in step on every change. Keyboard focus draws the kit's
+ * focus ring (2px --accent, offset 2px) round the thumb, in WebKit/Blink and
+ * Firefox alike; a pointer drag shows none.
+ *
  * Compact/touch: a native range input, so pointer/touch dragging is the
  * browser's own. Under (pointer: coarse) the input is a 44px-tall hit strip
  * (the 4px track is drawn inside it), the thumb grows to 20px, and
@@ -78,14 +85,17 @@ class SacSlider extends HTMLElement {
         return labels.length ? (labels[parseInt(value, 10)] || value) : `${value}${suffix}`;
     }
 
-    /** Update input.value + readout in place — safe during a drag. */
+    /** Update input.value + readout in place — safe during a drag. The
+     *  readout's text is also the value a screen reader hears. */
     _syncValue() {
         const input = this.shadowRoot.querySelector("input");
         const val = this.shadowRoot.querySelector(".val");
         if (!input) return;
         const value = this.getAttribute("value") ?? input.value;
         if (input.value !== value) input.value = value;
-        if (val) val.textContent = this._display(input.value);
+        const shown = this._display(input.value);
+        if (val) val.textContent = shown;
+        input.setAttribute("aria-valuetext", shown);
     }
 
     /** Update label/min/max/step in place, then refresh the readout. */
@@ -97,8 +107,25 @@ class SacSlider extends HTMLElement {
         input.max  = this.getAttribute("max")  || "100";
         input.step = this.getAttribute("step") || "1";
         if (label) label.textContent = this.getAttribute("label") || "";
+        this._syncName();
         this._syncEnds();
         this._syncValue();
+    }
+
+    /** The input's accessible name: the visible label (same shadow root, so
+     *  aria-labelledby reaches it); without one, the host's aria-label. */
+    _syncName() {
+        const input = this.shadowRoot.querySelector("input");
+        if (!input) return;
+        if (this.getAttribute("label")) {
+            input.setAttribute("aria-labelledby", "label");
+            input.removeAttribute("aria-label");
+        } else {
+            input.removeAttribute("aria-labelledby");
+            const own = this.getAttribute("aria-label");
+            if (own) input.setAttribute("aria-label", own);
+            else input.removeAttribute("aria-label");
+        }
     }
 
     /** The two end captions, in place; the row is hidden without `ends`. */
@@ -146,6 +173,7 @@ class SacSlider extends HTMLElement {
                     border-radius: 50%;
                     background: var(--accent);
                     cursor: pointer;
+                    transition: transform 0.2s var(--ease-smooth);
                 }
                 input[type="range"]::-moz-range-thumb {
                     width: 14px; height: 14px;
@@ -153,6 +181,29 @@ class SacSlider extends HTMLElement {
                     background: var(--accent);
                     cursor: pointer;
                     border: none;
+                    transition: transform 0.2s var(--ease-smooth);
+                }
+                /* Press: the thumb swells the moment it is grabbed and stays
+                   so for the drag. One rule per engine — a selector list that
+                   mixes -webkit- and -moz- pseudo-elements is dropped whole. */
+                input[type="range"]:active:not(:disabled)::-webkit-slider-thumb {
+                    transform: scale(1.1);
+                    transition-duration: 0.1s;
+                }
+                input[type="range"]:active:not(:disabled)::-moz-range-thumb {
+                    transform: scale(1.1);
+                    transition-duration: 0.1s;
+                }
+                /* Keyboard focus: the kit's ring (2px --accent) round the
+                   thumb — the input itself keeps outline: none. One rule per
+                   engine, as above. */
+                input[type="range"]:focus-visible::-webkit-slider-thumb {
+                    outline: 2px solid var(--accent);
+                    outline-offset: 2px;
+                }
+                input[type="range"]:focus-visible::-moz-range-thumb {
+                    outline: 2px solid var(--accent);
+                    outline-offset: 2px;
                 }
                 .ends {
                     display: flex;
@@ -194,14 +245,24 @@ class SacSlider extends HTMLElement {
                     input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; }
                     .row { margin-bottom: 0; }
                 }
+                @media (prefers-reduced-motion: reduce) {
+                    input[type="range"]::-webkit-slider-thumb { transition: none; }
+                    input[type="range"]::-moz-range-thumb { transition: none; }
+                }
             </style>
             <div class="row">
-                <span class="label">${label}</span>
-                <span class="val">${this._display(value)}</span>
+                <span class="label" id="label"></span>
+                <span class="val" aria-hidden="true"></span>
             </div>
             <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${this.disabled ? "disabled" : ""}/>
             <div class="ends" part="ends" hidden><span></span><span></span></div>
         `;
+        // Texts by textContent: a label is app data, never markup.
+        this.shadowRoot.querySelector(".label").textContent = label;
+        const shown = this._display(value);
+        this.shadowRoot.querySelector(".val").textContent = shown;
+        this.shadowRoot.querySelector("input").setAttribute("aria-valuetext", shown);
+        this._syncName();
         this._syncEnds();
     }
 

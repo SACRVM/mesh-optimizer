@@ -345,6 +345,12 @@
                         button { transition: none; }
                         button:hover:not(:disabled) { transform: none; }
                     }
+                    /* Press: replaces the lift the moment it goes down. Last,
+                       so it wins over both resets above (a tap is a hover too). */
+                    button:active:not(:disabled) {
+                        transform: scale(0.97);
+                        transition-duration: 0.1s;
+                    }
                 </style>
                 <button type="button"></button>
                 <span class="count" aria-hidden="true" hidden></span>

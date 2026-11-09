@@ -92,11 +92,16 @@ class SacSegmentedControl extends HTMLElement {
                     cursor: pointer;
                     font-size: 0.85rem;
                     font-family: inherit;
-                    transition: all 0.15s;
+                    transition: background-color 0.15s, color 0.15s;
                 }
                 ::slotted(button:hover) {
                     background: var(--hover) !important;
                     color: var(--text) !important;
+                }
+                /* Press: the segment answers the moment it goes down. */
+                ::slotted(button:active:not(.active)) {
+                    background: var(--hover-strong) !important;
+                    transition-duration: 0s;
                 }
                 ::slotted(button.active),
                 ::slotted(button.active:hover) {

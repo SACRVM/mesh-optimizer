@@ -80,7 +80,7 @@ export async function loadHelp(filename, targetElementId = 'help-content') {
         contentDiv.innerHTML = `
             <div style="text-align: center; padding: 2rem; color: var(--danger-text);">
                 <h3 data-sac-help="help.load-failed|Failed to load documentation">${esc(t('help.load-failed', 'Failed to load documentation'))}</h3>
-                <p style="font-family: monospace; font-size: 0.8rem; background: var(--field); padding: 0.5rem; border-radius: var(--radius-m);">${err.message}</p>
+                <p style="font-family: var(--font-mono); font-size: 0.8rem; background: var(--field); padding: 0.5rem; border-radius: var(--radius-m);">${err.message}</p>
                 <p style="font-size: 0.8rem; opacity: 0.7;" data-sac-help="help.check-console|Check console for details.">${esc(t('help.check-console', 'Check console for details.'))}</p>
             </div>
         `;

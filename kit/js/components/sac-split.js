@@ -51,6 +51,14 @@
  *                built-in back bar sets it back to "start". Ignored while the
  *                split is not collapsed. Nothing re-renders or moves: the
  *                hidden panel keeps its scroll position, form state, canvas.
+ *                Focus follows (2.36): when focus was in the panel that
+ *                goes (the row that opened the item, the Back button) or
+ *                nowhere, "end" moves it onto the end panel itself (no
+ *                field: no phone keyboard), and "start" returns it to the
+ *                element that had it before — else the selected row
+ *                ([aria-current] / [aria-selected="true"]), else the start
+ *                panel. Focus put elsewhere (by the user, or by the app
+ *                right after setting `show`) stays where it is.
  *   collapsed  — set BY THE COMPONENT while collapsed. Styling hook; the
  *                divider is hidden.
  *   rail-start — set BY THE COMPONENT when the start slot holds a rail that
@@ -59,6 +67,14 @@
  *                whatever its width or `collapse` say — otherwise an empty
  *                start panel would stand where the rail used to be (a phone
  *                held sideways is 844px wide).
+ *                Opening an item slides it in from the right; the back bar
+ *                slides it back out; and a finger or a pen can pull it off
+ *                to the right (the back swipe: 1:1, past half its width or
+ *                flicked = back, else it springs back — sac:split-back is
+ *                asked first, as for the bar). Never from a field, a slider,
+ *                [data-no-swipe], a surface with touch-action: none (a canvas,
+ *                a pan-zoom viewport) or one that scrolls sideways. Needs sac.motion; without it,
+ *                or under reduced motion, the panels swap at once.
  *   no-back    — hide the built-in back bar (draw your own and set `show`).
  *   back-label — the back bar's text (default "Back", i18n key split.back).
  *
@@ -141,9 +157,31 @@
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+    /** sac.motion when lib/motion.js is loaded; without it the panels swap
+     *  at once and there is no back swipe — the back bar still works. */
+    const motion = () => (window.sac && window.sac.motion) || null;
+
+    /** A back swipe never starts in these (they drag or type themselves). */
+    const NO_SWIPE = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), ' +
+        'sac-slider, [role="slider"], [role="separator"], [data-no-swipe]';
+
+    /** The focused element itself, down through every open shadow root. */
+    const deepActive = () => {
+        let a = document.activeElement;
+        while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+        return a;
+    };
+
+    /** `node` sits inside `box` as rendered: slots followed, shadow roots
+     *  left through their host. */
+    const within = (node, box) => {
+        for (let n = node; n; n = n.assignedSlot || n.parentNode || n.host) if (n === box) return true;
+        return false;
+    };
+
 class SacSplit extends HTMLElement {
     static get observedAttributes() {
-        return ["direction", "position", "min-start", "min-end", "aria-label", "collapse", "back-label"];
+        return ["direction", "position", "min-start", "min-end", "aria-label", "collapse", "back-label", "show"];
     }
 
     constructor() {
@@ -185,12 +223,14 @@ class SacSplit extends HTMLElement {
         this._ro?.disconnect();
         this._ro = null;
         this._endDrag();
+        this._settleSlide();
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
         if (!this.shadowRoot.firstChild) return;   // pre-upgrade attribute
         if (this._internal) return;                // our own write-back
         if (name === "aria-label" || name === "back-label") { this._syncLabel(); return; }
+        if (name === "show") { this._onShow(oldValue, newValue); this._handFocus(oldValue, newValue); return; }
         if (name === "collapse") { this._syncCollapse(); return; }
         if (name === "position") {
             this._set(this._parse(newValue), { emit: false, reflect: this.hasAttribute("position") });
@@ -360,10 +400,196 @@ class SacSplit extends HTMLElement {
         const next = (at > 0 && w > 0 && w <= at) || railDrawer;
         if (next === this.hasAttribute("collapsed")) return;
         this.toggleAttribute("collapsed", next);
+        if (!next) this._settleSlide();
         if (!next) this._reclamp();   // the clamp skipped while collapsed
         this.dispatchEvent(new CustomEvent("sac:collapse", {
             detail: { collapsed: next }, bubbles: true, composed: true,
         }));
+    }
+
+    /* ------------------------------------------------- collapsed: the slide */
+
+    /*
+     * One model for every way between the two collapsed panels: x = how far
+     * the end panel is pushed off to the right, 0 (it shows) … its width
+     * (gone), with the start panel beneath drifting in from -25% (depth).
+     * Opening an item, the back bar and the back swipe all move x with a
+     * spring, so any of them can catch another mid-flight. Reduced motion or
+     * no sac.motion: the panels swap at once.
+     */
+
+    /** The panels may slide at all: collapsed into two, motion allowed. */
+    _canSlide() {
+        return this.hasAttribute("collapsed") && !this.hasAttribute("rail-start") && !!motion();
+    }
+
+    /** `show` changed: slide to it — unless a swipe moves it already. */
+    _onShow(oldValue, newValue) {
+        const was = oldValue === "end" ? "end" : "start";
+        const now = newValue === "end" ? "end" : "start";
+        if (was === now || this._swipeOwns || !this.isConnected || !this._canSlide()) return;
+        const w = this._end.getBoundingClientRect().width || this.getBoundingClientRect().width;
+        const from = this._slide ? this._slideX : (now === "end" ? w : 0);
+        this._slideTo(from, now === "end" ? 0 : w, 0);
+    }
+
+    /** Collapsed, one panel replaces the other: focus must not stay on the
+     *  one that goes (the row that opened the item, the Back button) and
+     *  fall to <body>. To "end": the end panel takes it, and the element
+     *  that had it in the start panel is kept. Back to "start": focus
+     *  returns to that element — else to the selected row
+     *  ([aria-current] / [aria-selected="true"]), else to the start panel.
+     *  Only when focus was in the panel that goes, or nowhere: focus the
+     *  user (or the app) has put elsewhere stays there. */
+    _handFocus(oldValue, newValue) {
+        const was = oldValue === "end" ? "end" : "start";
+        const now = newValue === "end" ? "end" : "start";
+        if (was === now || !this.isConnected) return;
+        if (!this.hasAttribute("collapsed") || this.hasAttribute("rail-start")) return;
+        const act = deepActive();
+        const lost = !act || act === document.body || act === document.documentElement;
+        if (!lost && !within(act, now === "end" ? this._start : this._end)) return;
+        if (now === "end") {
+            this._focusBack = lost ? null : act;
+            this._focusPane(this._end);
+            return;
+        }
+        const back = this._focusBack;
+        this._focusBack = null;
+        const take = (el) => {
+            if (!el || !el.isConnected || !within(el, this._start)) return false;
+            el.focus({ preventScroll: true });
+            const a = deepActive();
+            return !!a && within(a, el);
+        };
+        if (take(back)) return;
+        const sel = '[aria-current]:not([aria-current="false"]), [aria-selected="true"]';
+        const slot = this.shadowRoot.querySelector('slot[name="start"]');
+        for (const el of slot.assignedElements({ flatten: true })) {
+            if (take(el.matches(sel) ? el : el.querySelector(sel))) return;
+        }
+        this._focusPane(this._start);
+    }
+
+    /** Focus a panel itself: tabindex -1 only while it holds the focus, so
+     *  a scrolling panel keeps the browser's own Tab behaviour otherwise. */
+    _focusPane(pane) {
+        if (pane.hasAttribute("tabindex")) { pane.focus({ preventScroll: true }); return; }
+        pane.setAttribute("tabindex", "-1");
+        const drop = () => pane.removeAttribute("tabindex");
+        pane.focus({ preventScroll: true });
+        if (this.shadowRoot.activeElement === pane) pane.addEventListener("blur", drop, { once: true });
+        else drop();
+    }
+
+    /** The colour behind the split, for the sliding panel to carry. */
+    _ground() {
+        for (let n = this; n; n = n.parentNode || n.host) {
+            if (n.nodeType !== 1) continue;
+            const bg = getComputedStyle(n).backgroundColor;
+            if (bg && bg !== "transparent" && !/^rgba\(.*,\s*0\)$/.test(bg)) return bg;
+        }
+        return "var(--bg)";
+    }
+
+    /** Both panels rendered, the end one x px off to the right. */
+    _placeSlide(x) {
+        if (!this.hasAttribute("sliding")) {
+            this._end.style.background = this._ground();
+            this.setAttribute("sliding", "");
+        }
+        this._slideX = x;
+        const w = this._end.getBoundingClientRect().width || 1;
+        this._end.style.transform = `translateX(${x}px)`;
+        this._start.style.transform = `translateX(${-0.25 * Math.max(0, w - x)}px)`;
+    }
+
+    /** Spring x to `to`; arriving at the right edge, the start panel stays. */
+    _slideTo(from, to, velocity, damping = 1) {
+        const m = motion();
+        if (this._slide) this._slide.stop();
+        this._placeSlide(from);
+        const s = this._slide = m.spring({
+            from, to, velocity, damping, response: 0.35,
+            onUpdate: (x) => this._placeSlide(x),
+            onDone: () => { if (this._slide === s) this._settleSlide(); },
+        });
+    }
+
+    /** End any slide: inline styles off, each panel back to the stylesheet. */
+    _settleSlide() {
+        if (this._slide) { this._slide.stop(); this._slide = null; }
+        if (!this.hasAttribute("sliding")) return;
+        this.removeAttribute("sliding");
+        for (const el of [this._start, this._end]) { el.style.transform = ""; el.style.background = ""; }
+    }
+
+    /** The back swipe: a finger or a pen pulls the open item off to the
+     *  right, 1:1 after 10px that are clearly sideways. Never from a field,
+     *  a slider, [data-no-swipe] or anything that scrolls sideways itself. */
+    _swipeDown(e) {
+        if (e.pointerType === "mouse" || this._swipe || e.__sacSwipe) return;
+        if (this.show !== "end" || !this._canSlide()) return;
+        const path = e.composedPath();
+        const stop = path.indexOf(this._end);
+        for (let i = 0; i < stop; i++) {
+            const n = path[i];
+            if (n.nodeType !== 1) continue;
+            if (n.matches(NO_SWIPE)) return;
+            const cs = getComputedStyle(n);
+            // A surface that takes the finger itself — a canvas someone paints
+            // on, a pan-zoom viewport (touch-action: none) — or one that
+            // scrolls sideways keeps its gesture.
+            if (cs.touchAction === "none") return;
+            if (n.scrollWidth > n.clientWidth + 1 && /auto|scroll/.test(cs.overflowX)) return;
+        }
+        e.__sacSwipe = true;                       // an outer split leaves it to this one
+        const caught = !!this._slide;
+        if (caught) { this._slide.stop(); this._slide = null; }
+        this._swipe = {
+            id: e.pointerId, x0: e.clientX, y0: e.clientY,
+            decided: caught, base: caught ? this._slideX : 0, x: caught ? this._slideX : 0,
+            track: motion().tracker(),
+        };
+    }
+
+    _swipeMove(e) {
+        const s = this._swipe;
+        if (!s || e.pointerId !== s.id) return;
+        if (!s.decided) {
+            const dx = e.clientX - s.x0, dy = e.clientY - s.y0;
+            if (Math.hypot(dx, dy) < 10) return;
+            if (dx <= 0 || Math.abs(dx) <= Math.abs(dy) * 1.2) { this._swipe = null; return; }
+            s.decided = true;
+            s.x0 = e.clientX;                      // 1:1 from here — no jump by the slop
+        }
+        const m = motion();
+        const raw = s.base + e.clientX - s.x0;
+        s.x = raw < 0 ? m.rubberband(raw, this._end.getBoundingClientRect().width) : raw;
+        this._placeSlide(s.x);
+        s.track.add(s.x, e.timeStamp);
+    }
+
+    _swipeUp(e) {
+        const s = this._swipe;
+        if (!s || e.pointerId !== s.id) return;
+        this._swipe = null;
+        if (!s.decided) return;
+        const m = motion();
+        const w = this._end.getBoundingClientRect().width;
+        const v = e.type === "pointerup" ? s.track.velocity(e.timeStamp) : 0;
+        let leave = s.x + m.project(v) > w / 2;
+        if (leave) {
+            // The same question the back bar asks: an app may keep the item.
+            const ev = new CustomEvent("sac:split-back", { bubbles: true, composed: true, cancelable: true });
+            leave = this.dispatchEvent(ev);
+        }
+        if (leave) {
+            this._swipeOwns = true;
+            this.show = "start";
+            this._swipeOwns = false;
+        }
+        this._slideTo(s.x, leave ? w : 0, v, !leave && Math.abs(v) > 400 ? 0.8 : 1);
     }
 
     /* -------------------------------------------------------------- pointer */
@@ -478,6 +704,9 @@ class SacSplit extends HTMLElement {
                     min-height: 0;
                     overflow: auto;
                 }
+                /* A panel focused by script on a collapsed switch (_handFocus)
+                   is a container: no ring. */
+                .pane[tabindex="-1"]:focus { outline: none; }
                 /* Sized panel: flex-basis is written by _set(), never grows or
                    shrinks on its own. */
                 .start { flex: 0 0 auto; }
@@ -487,12 +716,12 @@ class SacSplit extends HTMLElement {
                 /* Scrollbar — the kit recipe (ui.css §5), re-stated because
                    ::-webkit-scrollbar does not pierce a shadow root. Firefox, which has
                    no ::-webkit-scrollbar, gets the standard pair instead. */
-                .pane::-webkit-scrollbar { width: 10px; height: 10px; }
+                .pane::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
                 .pane::-webkit-scrollbar-track { background: transparent; }
                 .pane::-webkit-scrollbar-thumb {
                     background: var(--scrollbar-thumb);
                     background-clip: content-box;
-                    border: 2px solid transparent;
+                    border: var(--scrollbar-gap) solid transparent;
                     border-radius: 999px;
                 }
                 .pane::-webkit-scrollbar-thumb:hover {
@@ -566,6 +795,22 @@ class SacSplit extends HTMLElement {
                 :host([collapsed][rail-start]) .end { display: block; }
                 :host([collapsed][rail-start]) .back { display: none !important; }
 
+                /* A slide between the two (opening an item, the back bar, the
+                   back swipe): both stay rendered, the end panel above the
+                   start one on the ground it hides, a shadow on its edge. */
+                :host([collapsed][sliding]) { position: relative; overflow: hidden; }
+                :host([collapsed][sliding]) .start { display: block; }
+                :host([collapsed][sliding]) .end {
+                    display: block;
+                    position: absolute;
+                    inset: 0;
+                    z-index: 2;
+                    box-shadow: var(--shadow-2);
+                }
+                /* Scrolls up and down natively; a sideways finger is the
+                   back swipe (see _swipeDown). */
+                :host([collapsed][show="end"]) .end { touch-action: pan-y pinch-zoom; }
+
                 .back { display: none; }
                 :host([collapsed][show="end"]:not([no-back])) .back {
                     display: flex;
@@ -594,6 +839,8 @@ class SacSplit extends HTMLElement {
                     --icon-size: 18px;
                 }
                 .back button:hover { background: var(--hover); }
+                /* Press: answers the moment it goes down. */
+                .back button:active { background: var(--hover-strong); transition-duration: 0s; }
                 .back button:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: -2px;
@@ -608,6 +855,23 @@ class SacSplit extends HTMLElement {
 
                 @media (prefers-reduced-motion: reduce) {
                     .divider::before { transition: none; }
+                }
+                /* Reduced transparency / more contrast: the blurred back bar
+                   turns solid (same hue), its edge a clearly visible line. */
+                @media (prefers-reduced-transparency: reduce) {
+                    :host([collapsed][show="end"]:not([no-back])) .back {
+                        background: var(--glass-solid);
+                        backdrop-filter: none;
+                        -webkit-backdrop-filter: none;
+                    }
+                }
+                @media (prefers-contrast: more) {
+                    :host([collapsed][show="end"]:not([no-back])) .back {
+                        background: var(--glass-solid);
+                        backdrop-filter: none;
+                        -webkit-backdrop-filter: none;
+                        border-bottom-color: var(--border-contrast);
+                    }
                 }
             </style>
             <div class="pane start"><slot name="start"></slot></div>
@@ -630,6 +894,10 @@ class SacSplit extends HTMLElement {
         new MutationObserver(() => this._syncRailStart())
             .observe(this, { attributes: true, subtree: true, attributeFilter: ["drawer", "slot"] });
         this.shadowRoot.querySelector(".back button").addEventListener("click", () => this.back());
+        this._end.addEventListener("pointerdown", (e) => this._swipeDown(e));
+        this._end.addEventListener("pointermove", (e) => this._swipeMove(e));
+        this._end.addEventListener("pointerup", (e) => this._swipeUp(e));
+        this._end.addEventListener("pointercancel", (e) => this._swipeUp(e));
 
         // Listeners live on the shadow-internal divider, so they die with the
         // shadow root: no document-level pointer handlers to leak, and nested

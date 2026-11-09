@@ -1,0 +1,208 @@
+/* SACRVM APPKIT — showcase: the style guide's page look, for any API page.
+
+   The kit's style guide is built on it, and an add-on documenting itself in
+   its own repo links it too, so every API page reads alike. Opt-in: link it
+   after ui.css on a documentation page; apps never need it. Helpers that
+   write the markup: kit/js/lib/showcase.js (sac.showcase). Starter page:
+   kit/templates/showcase.html.
+
+   .sg-page        the page column (h1 gradient, p.lead, h2 / h3, prose)
+   .sg-demo        a live-example box (.on-bg: on the page ground)
+   .sg-row/.sg-col examples side by side / stacked
+   pre.sg-code     a code block (sac.showcase.code)
+   table.sg        an API table (sac.showcase.table)
+   .sg-note        warm callout — a caveat
+   .sg-compact     "Compact / touch:" line — the phone behaviour
+   .sg-muted       small muted text
+   Built on the kit's tokens only — a retheme rethemes the page. */
+
+.sg-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2.5rem 2rem 4rem;
+    /* The shell's <body class="app-page"> turns selection off; a reference
+       page has to stay copyable, so the guide re-enables it for itself. */
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.sg-page h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 0.4rem;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.sg-page > p.lead {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    max-width: 70ch;
+    margin: 0 0 2.5rem;
+}
+
+.sg-page h2 {
+    font-size: 1.35rem;
+    margin: 3rem 0 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+.sg-page h2:first-of-type { border-top: none; margin-top: 1.5rem; }
+.sg-page h3 {
+    font-size: 1.05rem;
+    margin: 2rem 0 0.5rem;
+    color: var(--text);
+}
+.sg-page p {
+    color: var(--text-muted);
+    max-width: 78ch;
+}
+.sg-page p strong { color: var(--text); }
+
+/* Demo boxes */
+.sg-demo {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-l);
+    padding: 1.25rem;
+    margin: 0.75rem 0;
+}
+.sg-demo.on-bg { background: var(--bg); }
+.sg-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+.sg-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 340px;
+}
+
+/* Inline code + code blocks */
+.sg-page code {
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-s);
+    padding: 1px 5px;
+    font-size: 0.85em;
+    font-family: var(--font-mono);
+    color: var(--text);
+}
+pre.sg-code {
+    background: var(--field);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-m);
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    font-family: var(--font-mono);
+    color: color-mix(in srgb, var(--fg) 85%, var(--bg));
+    margin: 0.75rem 0;
+}
+pre.sg-code code { background: none; border: none; padding: 0; font-size: inherit; }
+
+/* API tables */
+table.sg {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 1.5rem;
+    font-size: 0.85rem;
+}
+table.sg th {
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    font-weight: 700;
+    padding: 0.4rem 0.75rem 0.4rem 0;
+    border-bottom: 1px solid var(--border-strong);
+}
+table.sg td {
+    padding: 0.5rem 0.75rem 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    vertical-align: top;
+}
+table.sg td:first-child { white-space: nowrap; }
+
+/* Misc */
+.sg-note {
+    background: color-mix(in srgb, var(--accent-warm) 7%, transparent);
+    border-radius: var(--radius-l);
+    padding: 0.7rem 1rem;
+    margin: 0.75rem 0;
+    font-size: 0.87rem;
+    color: var(--text-muted);
+}
+.sg-note b { color: color-mix(in oklab, var(--accent-warm) 65%, var(--fg)); }
+
+.sg-muted { color: var(--text-muted); font-size: 0.85rem; }
+
+/* "Compact / touch:" — a component's phone behaviour, one line per section.
+   Accent-tinted where .sg-note is warm: a fact, not a warning. */
+.sg-page p.sg-compact {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    border-radius: var(--radius-l);
+    padding: 0.7rem 1rem;
+    margin: 0.75rem 0;
+    font-size: 0.87rem;
+    max-width: none;
+}
+.sg-compact b { color: var(--accent-text); }
+
+
+/* The page on a phone. Page layout, so @media (the page is the container). */
+@media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
+    .sg-page { padding: 1.5rem 1rem 3rem; }
+    .sg-page h1 { font-size: 1.8rem; }
+    .sg-page > p.lead { font-size: 1rem; margin-bottom: 1.75rem; }
+    .sg-page h2 { margin-top: 2.25rem; }
+    .sg-demo { padding: 1rem; }
+    /* A chip that wraps keeps its border and padding on both lines. */
+    .sg-page code {
+        -webkit-box-decoration-break: clone;
+        box-decoration-break: clone;
+    }
+    /* Code scrolls inside itself; a soft inset edge on the side that still
+       has more says so (sac.showcase.watchCode keeps the classes). */
+    pre.sg-code {
+        padding: 0.75rem 0.85rem;
+        overscroll-behavior-x: contain;
+        --sg-edge: color-mix(in srgb, var(--fg) 16%, transparent);
+    }
+    pre.sg-code.sg-more-end { box-shadow: inset -18px 0 14px -14px var(--sg-edge); }
+    pre.sg-code.sg-more-start { box-shadow: inset 18px 0 14px -14px var(--sg-edge); }
+    pre.sg-code.sg-more-start.sg-more-end {
+        box-shadow: inset -18px 0 14px -14px var(--sg-edge), inset 18px 0 14px -14px var(--sg-edge);
+    }
+    /* Keys wrap instead of pushing the table past the edge; the inline
+       220px key-column widths are a desktop affordance. */
+    table.sg th { width: auto !important; }
+    table.sg td { overflow-wrap: anywhere; }
+    /* A key breaks at its spaces and slashes, never inside a name: the
+       column grows to its longest word ("register(manifest)") instead of
+       splitting it into "register(" / "manifest". */
+    table.sg td:first-child { white-space: normal; overflow-wrap: break-word; }
+}
+@media (max-width: 480px) {
+    /* Two columns of prose do not fit a phone: each row stacks, the key on
+       top of its description. */
+    table.sg, table.sg tbody, table.sg tr, table.sg td, table.sg th { display: block; }
+    /* The header row keeps its first cell — "Attribute", "Event" … is the
+       only thing that says what the keys below are. */
+    table.sg th + th { display: none; }
+    table.sg td, table.sg th { padding: 0.15rem 0; border-bottom: none; }
+    table.sg td:first-child { padding-top: 0.6rem; }
+    table.sg tr { border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    /* Three columns stacked: the middle one is a VALUE (a curve, a length,
+       a fallback string), set a step brighter than the prose under it. */
+    table.sg td:not(:first-child):not(:last-child) { color: var(--text); }
+    .sg-page h2 { font-size: 1.2rem; margin-top: 2rem; }
+    .sg-page h3 { margin-top: 1.6rem; }
+}

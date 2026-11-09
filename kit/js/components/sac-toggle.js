@@ -112,11 +112,19 @@ class SacToggle extends HTMLElement {
                     top: 1px; left: 1px;
                     width: 12px; height: 12px;
                     background: var(--text);
-                    border-radius: 50%;
-                    transition: transform 0.2s, background 0.2s;
+                    border-radius: 999px;          /* a circle at rest, a pill while pressed */
+                    transition: transform 0.2s, background 0.2s, width 0.2s;
                 }
                 :host([checked]) .switch { background: var(--accent); }
                 :host([checked]) .knob   { transform: translateX(14px); background: var(--on-accent); }
+                /* Press: the knob stretches 3px toward the side it would
+                   travel to, the moment the pointer goes down (the whole
+                   row is the target, so a press on the label counts too). */
+                :host(:not([disabled]):active) .knob {
+                    width: 15px;
+                    transition-duration: 0.1s;
+                }
+                :host([checked]:not([disabled]):active) .knob { transform: translateX(11px); }
                 /* Touch: the whole row is the target (label included), so a
                    44px-tall row is the hit area — the 28px switch keeps its
                    look. */

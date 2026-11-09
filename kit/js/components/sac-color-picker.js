@@ -564,6 +564,7 @@
                             0 0 0 2px var(--surface),
                             0 0 0 3px color-mix(in srgb, var(--fg) 45%, transparent),
                             var(--shadow-1);
+                        transition: transform 0.2s var(--ease-smooth);
                     }
                     .thumb:focus-visible {
                         outline: 2px solid var(--accent);
@@ -604,6 +605,12 @@
                         transform: translate(-50%, -50%);
                         background: var(--c);          /* data, not theme */
                     }
+                    /* Press: the thumb swells while its surface is held —
+                       the moment it goes down, for the whole drag. */
+                    .sv:active .sv-thumb {
+                        transform: translate(-50%, -50%) scale(1.1);
+                        transition-duration: 0.1s;
+                    }
 
                     /* --- strips ------------------------------------------ */
                     .strip {
@@ -635,6 +642,10 @@
                         height: 16px;
                         border-radius: var(--radius-s);
                         transform: translate(-50%, -50%);
+                    }
+                    .strip:active .strip-thumb {
+                        transform: translate(-50%, -50%) scale(1.1);
+                        transition-duration: 0.1s;
                     }
                     .hue-thumb   { background: hsl(var(--h) 100% 50%); }  /* data, not theme */
                     .alpha-thumb { background: var(--ca); }               /* data, not theme */
@@ -681,6 +692,7 @@
                         border-radius: 50%;
                         background: var(--accent);
                         cursor: pointer;
+                        transition: transform 0.2s var(--ease-smooth);
                     }
                     input[type="range"]::-moz-range-thumb {
                         width: 14px;
@@ -689,6 +701,17 @@
                         border-radius: 50%;
                         background: var(--accent);
                         cursor: pointer;
+                        transition: transform 0.2s var(--ease-smooth);
+                    }
+                    /* Press, as <sac-slider>: one rule per engine — a list
+                       mixing -webkit- and -moz- pseudo-elements is dropped. */
+                    input[type="range"]:active:not(:disabled)::-webkit-slider-thumb {
+                        transform: scale(1.1);
+                        transition-duration: 0.1s;
+                    }
+                    input[type="range"]:active:not(:disabled)::-moz-range-thumb {
+                        transform: scale(1.1);
+                        transition-duration: 0.1s;
                     }
                     input[type="range"]:focus-visible {
                         outline: 2px solid var(--accent);
@@ -753,7 +776,7 @@
                         background: var(--ca);        /* data, not theme */
                     }
                     .hex {
-                        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                        font-family: var(--font-mono);
                         letter-spacing: 0.02em;
                         padding: 7px 8px;
                     }
@@ -807,7 +830,10 @@
 
                     @media (prefers-reduced-motion: reduce) {
                         input[type="number"],
-                        .hex { transition: none; }
+                        .hex,
+                        .thumb { transition: none; }
+                        input[type="range"]::-webkit-slider-thumb { transition: none; }
+                        input[type="range"]::-moz-range-thumb { transition: none; }
                     }
                 </style>
                 <div class="root" id="root" role="group" aria-label="${L.root}">

@@ -8,6 +8,14 @@
  *
  * Content = light-DOM children.
  *
+ * Slot toolbar: <div slot="toolbar">…</div> — a row between the title bar
+ *             and the content, OUTSIDE the scroll container: a window's
+ *             actions, search or filters stay put while the content
+ *             scrolls. Same side padding as the content, no ground of its
+ *             own (it is part of the glass); a 1px hairline under it shows
+ *             only while the content is scrolled away from its top. Empty =
+ *             gone. Shadow part: toolbar.
+ *
  * Attributes: title, width, height, top, left, open,
  *             width / height — any CSS length; height="auto" sizes the
  *                         window to its content (until the user resizes).
@@ -35,6 +43,9 @@
  *                         methods stay callable regardless.
  *             no-resize — boolean; hides the resize handle and disables
  *                         resizing. Dragging is unaffected.
+ *             escape-closes — boolean; Escape closes the window (see
+ *                         Keyboard). Opt-in: an editor or a tool palette
+ *                         keeps Escape for itself.
  *             no-compact — boolean; opts OUT of the compact rules below: on
  *                         a narrow screen the window stays a floating
  *                         window (draggable, its own size, pushed into
@@ -55,6 +66,17 @@
  *             (z-index walk over all sac-windows, base 10000),
  *             minimize(), maximize(), restore()
  *             — restore() returns to the normal rect from either state.
+ *             A window comes forward by itself the moment it is pressed
+ *             anywhere (pointerdown, before a drag starts) or focus moves
+ *             into it (focusin: Tab, a dialog handing focus back) — a
+ *             covered window is never typed into unseen.
+ *
+ * Traffic lights: three dots in --accent-warm / --ok / --danger with their
+ *             glyphs drawn in (minimise −, maximise / restore as two
+ *             triangles pointing out / in, close ×), inked in the dot's own
+ *             colour sunk dark. The glyphs show while the dot group is
+ *             hovered or holds keyboard focus, and always on touch
+ *             (hover: none) and under prefers-contrast: more.
  * Events:     sac:open / sac:close — detail { window }.
  *             sac:minimize / sac:maximize / sac:restore — detail { window }.
  *             All bubble + composed; the restore event covers the return from
@@ -73,9 +95,23 @@
  *
  * Double-clicking the title bar toggles maximize / restore.
  *
+ * Keyboard:
+ *   - On open (open() or the attribute, not the first paint) focus moves
+ *     into the window: an element with `autofocus`, else the first focusable
+ *     one in the toolbar or content that isn't a text field (no keyboard
+ *     popping up on a phone, no hotkeys typed into a field), else the window
+ *     itself. A focus the app sets right after open() wins. On close it goes
+ *     back to whoever had it before — if it is still in the window (or
+ *     nowhere); a user who has moved on keeps theirs.
+ *   - Escape (`escape-closes`) closes the window focus is in, when nothing
+ *     inside consumed the key (an open sac-select list, a menu, a field
+ *     reverting its typing — stopPropagation or preventDefault). A
+ *     <sac-dialog> open above takes the Escape first.
+ *
  * CSS custom properties: --window-padding — the content's inner padding,
  *             default 20px (a tool palette wants ~8px; 0 for edge-to-edge
- *             content). Shadow part: content — the scrolling content box.
+ *             content). Shadow parts: content — the scrolling content box;
+ *             toolbar — the fixed row above it.
  *
  * Compact (ui.css §15 — ≤768px, or a phone held sideways): drag-and-resize is a desktop metaphor, so a
  * window is ALWAYS maximized there — an open window maximizes itself, the
@@ -91,6 +127,10 @@
      *  the component runs standalone. */
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
+
+    /** sac.motion when lib/motion.js is loaded; without it a drag still
+     *  works, only the rubber band and the spring on release are gone. */
+    const motion = () => (window.sac && window.sac.motion) || null;
 
 class SacWindow extends HTMLElement {
     constructor() {
@@ -114,6 +154,8 @@ class SacWindow extends HTMLElement {
 
         this._mq = window.matchMedia('(max-width: 768px), (max-height: 480px) and (pointer: coarse)');
         this._autoMax = false;        // maximized by compact, not by the user
+        this._restoreFocus = null;    // who had focus before open()
+        this.addEventListener('keydown', (e) => this._onKey(e));
         this._onCompactChange = () => this._syncCompact();
 
         this._onViewportResize = () => {
@@ -129,6 +171,7 @@ class SacWindow extends HTMLElement {
     static MAX_INSET = 8;
     static MIN_VISIBLE = 40;
     static SNAP = 12;             // edge-snapping distance while dragging
+    static FLICK = 400;           // px/s: a release faster than this was a throw (a little bounce)
     static Z_BASE = 10000;        // the window band: above the page …
     static Z_MAX = 18999;         // … below the open nav (19000) and dialogs (20000)
 
@@ -143,6 +186,9 @@ class SacWindow extends HTMLElement {
         }
         this.applyAttributes();
         this._updateControls();
+        // Focusable, so focus has a home in the window and a click on its
+        // plain content keeps it there.
+        if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
         window.addEventListener('resize', this._onViewportResize);
         this._mq.addEventListener('change', this._onCompactChange);
         this._syncCompact();
@@ -154,8 +200,10 @@ class SacWindow extends HTMLElement {
         if (this._offLang) { this._offLang(); this._offLang = null; }
         window.removeEventListener('resize', this._onViewportResize);
         this._mq.removeEventListener('change', this._onCompactChange);
-        // Drop any in-flight drag/resize listeners on document.
-        if (this.onMouseUp) this.onMouseUp();
+        // A drag or a throw in flight ends where it is.
+        this.isResizing = false;
+        if (this.isDragging) { this.isDragging = false; this._commitDrag(); }
+        this._freezeThrow();
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -178,7 +226,8 @@ class SacWindow extends HTMLElement {
         if (this.shadowRoot.innerHTML === '') return;
 
         if (name === 'open') {
-            if (newValue !== null) { this._syncCompact(); this._fitIntoView(); }
+            if (newValue !== null) { this._syncCompact(); this._fitIntoView(); this._focusIn(); }
+            else this._focusBack();
             return;
         }
         if (name === 'no-compact') { this._syncCompact(); return; }
@@ -213,6 +262,7 @@ class SacWindow extends HTMLElement {
     }
 
     close() {
+        this._freezeThrow();
         this.removeAttribute('open');
         this.dispatchEvent(new CustomEvent('sac:close', { detail: { window: this }, bubbles: true, composed: true }));
     }
@@ -220,6 +270,81 @@ class SacWindow extends HTMLElement {
     toggle() {
         if (this.hasAttribute('open')) this.close();
         else this.open();
+    }
+
+    /** The focused element itself, through every open shadow root. */
+    static _deepActive() {
+        let a = document.activeElement;
+        while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+        return a;
+    }
+
+    /** el is this window or inside it — across shadow roots. */
+    _holds(el) {
+        for (let n = el; n; n = n.parentNode || n.host) if (n === this) return true;
+        return false;
+    }
+
+    /** The first focusable in the toolbar, then the content — slots followed,
+     *  shadow roots walked — that isn't a text field. */
+    _firstFocusable() {
+        const sel = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+            'select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const typing = (el) => el.localName === 'input'
+            && !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/.test(el.type);
+        const walk = (el) => {
+            if (el.hidden || el.inert) return null;
+            if (el.localName === 'slot') {
+                const assigned = el.assignedElements({ flatten: true });
+                for (const c of assigned.length ? assigned : Array.from(el.children)) {
+                    const hit = walk(c);
+                    if (hit) return hit;
+                }
+                return null;
+            }
+            const self = el.matches(sel) && !el.matches('textarea') && !typing(el)
+                && !el.isContentEditable && el.getClientRects().length > 0;
+            // Document order: the element before its children — but a host
+            // with focusables of its own: its insides are the stops.
+            if (self && !el.shadowRoot) return el;
+            for (const c of Array.from((el.shadowRoot || el).children)) {
+                const hit = walk(c);
+                if (hit) return hit;
+            }
+            return self ? el : null;
+        };
+        for (const part of this.shadowRoot.querySelectorAll('.toolbar, .content')) {
+            const hit = walk(part);
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    _focusIn() {
+        const active = SacWindow._deepActive();
+        if (this._holds(active)) return;
+        this._restoreFocus = active && active !== document.body ? active : null;
+        const target = this.querySelector('[autofocus]') || this._firstFocusable() || this;
+        target.focus({ preventScroll: true });
+    }
+
+    _focusBack() {
+        const back = this._restoreFocus;
+        this._restoreFocus = null;
+        if (!back || !back.isConnected || typeof back.focus !== 'function') return;
+        const active = SacWindow._deepActive();
+        if (active && active !== document.body && !this._holds(active)) return;
+        back.focus({ preventScroll: true });
+    }
+
+    /** Escape that bubbled out of the window's content unconsumed closes it
+     *  (`escape-closes`). preventDefault keeps sac.hotkeys out of it. */
+    _onKey(e) {
+        if (e.key !== 'Escape' || e.defaultPrevented || !this.hasAttribute('escape-closes')
+            || !this.hasAttribute('open')) return;
+        e.stopPropagation();
+        e.preventDefault();
+        this.close();
     }
 
     /** Collapse to the title bar. Clears `maximized` (normal rect first). */
@@ -270,6 +395,7 @@ class SacWindow extends HTMLElement {
                 display: none;
                 position: fixed;
                 z-index: 10000;
+                outline: none;
                 font-family: 'Inter', sans-serif;
                 box-sizing: border-box;
             }
@@ -283,6 +409,7 @@ class SacWindow extends HTMLElement {
                what disappears, what stops being grabbable, how the corners
                change. */
             :host([minimized]) .content,
+            :host([minimized]) .toolbar,
             :host([minimized]) .resize-handle,
             :host([maximized]) .resize-handle,
             :host([no-resize]) .resize-handle {
@@ -320,6 +447,7 @@ class SacWindow extends HTMLElement {
             }
             :host([compact]) .content {
                 padding-bottom: calc(var(--window-padding, 20px) + env(safe-area-inset-bottom, 0px));
+                background: transparent;   /* the whole window is opaque already */
             }
 
             .window-container {
@@ -346,6 +474,8 @@ class SacWindow extends HTMLElement {
                 justify-content: space-between;
                 cursor: grab;
                 user-select: none;
+                /* A finger on the bar drags the window, never the page. */
+                touch-action: none;
             }
 
             .title-bar:active {
@@ -367,9 +497,9 @@ class SacWindow extends HTMLElement {
                 gap: 8px;
             }
 
-            /* Traffic lights: three plain colored dots, no glyphs — the color
-               carries the meaning, the state-aware title/aria-label carries
-               the words. */
+            /* Traffic lights: three colored dots; the state-aware
+               title/aria-label carries the words, a glyph in each dot the
+               meaning (below) — colour alone never does. */
             .ctrl-btn {
                 --btn-color: var(--danger);
                 width: 15px;
@@ -397,6 +527,36 @@ class SacWindow extends HTMLElement {
             .max-btn { --btn-color: var(--ok); }
             .close-btn { --btn-color: var(--danger); }
 
+            /* Glyphs: −, maximise / restore (triangles out / in), ×. Shown
+               while the group is hovered or keyboard-focused (always on
+               touch and under more contrast — the media blocks below). Ink
+               = the dot's own colour sunk dark, the kit's --on-warm /
+               --on-ok recipe, so every theme and seed follows. 60% of the
+               dot, on a 9-unit grid: 9px in a 15px dot, 12px in a 20px. */
+            .ctrl-btn { --glyph-ink: color-mix(in srgb, var(--sink) 62%, var(--btn-color)); }
+            .glyph {
+                position: absolute;
+                left: 20%;
+                top: 20%;
+                width: 60%;
+                height: 60%;
+                fill: none;
+                stroke: var(--glyph-ink);
+                stroke-width: 1.25;
+                stroke-linecap: round;
+                opacity: 0;
+                transition: opacity 0.12s var(--ease-smooth);
+                pointer-events: none;
+            }
+            .glyph .g-fill { fill: var(--glyph-ink); stroke: none; }
+            .max-btn .g-restore { display: none; }
+            :host([maximized]) .max-btn .g-max,
+            :host([minimized]) .max-btn .g-max { display: none; }
+            :host([maximized]) .max-btn .g-restore,
+            :host([minimized]) .max-btn .g-restore { display: inline; }
+            .controls:hover .glyph { opacity: 1; }
+            .controls:has(:focus-visible) .glyph { opacity: 1; }
+
             /* [controls] opts into an explicit subset: hide all three, then
                re-show per space-separated token. No attribute = all three. */
             :host([controls]) .ctrl-btn { display: none; }
@@ -407,21 +567,47 @@ class SacWindow extends HTMLElement {
             .content {
                 flex: 1;
                 overflow: auto;
+                /* A scroll that reaches the window's end stops there — the
+                   page behind the window never moves under it. */
+                overscroll-behavior: contain;
                 padding: var(--window-padding, 20px);
+                /* Glass is the chrome; the content sits on a near-opaque
+                   ground (--window-ground), so muted text, chips and icon
+                   buttons keep their contrast over a busy desktop. */
+                background: var(--window-ground);
                 color: color-mix(in srgb, var(--fg) 78%, var(--bg));
                 font-size: 0.9rem;
                 line-height: 1.6;
             }
 
+            /* Toolbar slot: fixed above the scrolling content, part of the
+               glass (no ground). Toolbar + content split the window padding
+               between them, so the gap to the first row is the usual one;
+               the content's top edge turns into a hairline only while
+               something has scrolled under it. */
+            .toolbar {
+                flex: none;
+                display: none;
+                padding: var(--window-padding, 20px) var(--window-padding, 20px)
+                         calc(var(--window-padding, 20px) / 2);
+            }
+            .window-container.has-toolbar .toolbar { display: block; }
+            .window-container.has-toolbar .content {
+                padding-top: calc(var(--window-padding, 20px) / 2);
+                border-top: 1px solid transparent;
+                transition: border-color 0.15s ease;
+            }
+            .window-container.has-toolbar.scrolled .content { border-top-color: var(--border); }
+
             /* Scrollbar — the kit recipe (ui.css §5), re-stated because
                ::-webkit-scrollbar does not pierce a shadow root. Firefox, which has
                no ::-webkit-scrollbar, gets the standard pair instead. */
-            .content::-webkit-scrollbar { width: 10px; height: 10px; }
+            .content::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
             .content::-webkit-scrollbar-track { background: transparent; }
             .content::-webkit-scrollbar-thumb {
                 background: var(--scrollbar-thumb);
                 background-clip: content-box;
-                border: 2px solid transparent;
+                border: var(--scrollbar-gap) solid transparent;
                 border-radius: 999px;
             }
             .content::-webkit-scrollbar-thumb:hover {
@@ -441,6 +627,7 @@ class SacWindow extends HTMLElement {
                 height: 20px;
                 cursor: nwse-resize;
                 z-index: 10;
+                touch-action: none;
             }
             .resize-handle::after {
                 content: '';
@@ -456,32 +643,57 @@ class SacWindow extends HTMLElement {
             /* A 44px hit area per dot on touch: 20px dots, 24px apart, each
                with an invisible halo — the halos meet, never overlap. */
             @media (pointer: coarse) {
+                /* The corner grip: a 44px target for a finger. */
+                .resize-handle::before { content: ''; position: absolute; inset: -12px; }
                 .controls { gap: 24px; }
                 .ctrl-btn { width: 20px; height: 20px; }
                 .ctrl-btn::after { content: ''; position: absolute; inset: -12px; }
             }
             @media (hover: none) {
                 .ctrl-btn:hover { transform: none; background: var(--btn-color); }
+                .glyph { opacity: 1; }
             }
 
             @media (prefers-reduced-motion: reduce) {
-                .ctrl-btn {
+                .ctrl-btn,
+                .glyph {
                     transition: none;
                 }
                 .ctrl-btn:hover {
                     transform: none;
                 }
             }
+
+            /* Press: the dot gives the moment the pointer goes down — fast
+               in (100ms), back at the normal pace — in place of the hover
+               growth. After the resets above, so a tap (a touch is a hover
+               too) still shows it. */
+            .ctrl-btn:active {
+                transform: scale(0.9);
+                transition-duration: 0.1s;
+            }
+
+            /* Reduced transparency / more contrast: the glass turns solid
+               (same hue, nothing shining through) and drops the blur; under
+               more contrast its edge becomes a clearly visible line. */
+            @media (prefers-reduced-transparency: reduce) {
+                .window-container { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+            }
+            @media (prefers-contrast: more) {
+                .window-container { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
+                .glyph { opacity: 1; }
+            }
         </style>
         <div class="window-container">
             <div class="title-bar">
                 <span class="title" id="window-title-text"></span>
                 <div class="controls">
-                    <button class="ctrl-btn min-btn" id="window-min-btn" type="button" title="${L.minimize}" aria-label="${L.minimize}"></button>
-                    <button class="ctrl-btn max-btn" id="window-max-btn" type="button" title="${L.maximize}" aria-label="${L.maximize}"></button>
-                    <button class="ctrl-btn close-btn" id="window-close-btn" title="${L.close}" aria-label="${L.close}"></button>
+                    <button class="ctrl-btn min-btn" id="window-min-btn" type="button" title="${L.minimize}" aria-label="${L.minimize}"><svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path d="M1.5 4.5h6"/></svg></button>
+                    <button class="ctrl-btn max-btn" id="window-max-btn" type="button" title="${L.maximize}" aria-label="${L.maximize}"><svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path class="g-fill g-max" d="M1.5 1.5h3.6L1.5 5.1zM7.5 7.5H3.9L7.5 3.9z"/><path class="g-fill g-restore" d="M4 4H.9L4 .9zM5 5h3.1L5 8.1z"/></svg></button>
+                    <button class="ctrl-btn close-btn" id="window-close-btn" type="button" title="${L.close}" aria-label="${L.close}"><svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path d="M2 2l5 5M7 2L2 7"/></svg></button>
                 </div>
             </div>
+            <div class="toolbar" part="toolbar"><slot name="toolbar"></slot></div>
             <div class="content" id="window-content" part="content">
                 <slot></slot>
             </div>
@@ -515,24 +727,135 @@ class SacWindow extends HTMLElement {
         return Number.isFinite(v) && v >= 0 ? v : SacWindow.MAX_INSET;
     }
 
-    /** While dragging: pull _dx/_dy onto an edge line within SNAP px. */
-    _snapDrag() {
+    /** A point pulled onto an edge line within SNAP px; remembers which. */
+    _snapPoint(left, top) {
         const T = SacWindow.SNAP;
         const gap = this._snapGap();
         const vw = document.documentElement.clientWidth;
         const vh = document.documentElement.clientHeight;
         const nav = this._navBottom();
         const w = this._dragW, h = this._dragH;
-        let left = this.startLeft + this._dx;
-        let top = this.startTop + this._dy;
         const snap = {};
         if (Math.abs(left - gap) <= T) { left = gap; snap.x = 'left'; }
         else if (Math.abs(left + w - (vw - gap)) <= T) { left = vw - gap - w; snap.x = 'right'; }
         if (Math.abs(top - (nav + gap)) <= T) { top = nav + gap; snap.y = 'top'; }
         else if (Math.abs(top + h - (vh - gap)) <= T) { top = vh - gap - h; snap.y = 'bottom'; }
-        this._dx = left - this.startLeft;
-        this._dy = top - this.startTop;
         this._snapped = snap;
+        return { left, top };
+    }
+
+    /** While dragging: pull _dx/_dy onto an edge line within SNAP px. */
+    _snapDrag() {
+        const p = this._snapPoint(this.startLeft + this._dx, this.startTop + this._dy);
+        this._dx = p.left - this.startLeft;
+        this._dy = p.top - this.startTop;
+    }
+
+    /** Where a window of this width may rest: MIN_VISIBLE px stay in view
+     *  horizontally, the title bar between the nav ribbon and the bottom. */
+    _bounds(width) {
+        const nav = this._navBottom();
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const titleBar = this.shadowRoot.querySelector('.title-bar');
+        const titleH = titleBar ? titleBar.offsetHeight : 44;
+        const keep = Math.min(SacWindow.MIN_VISIBLE, width);
+        return { minLeft: keep - width, maxLeft: vw - keep, minTop: nav, maxTop: Math.max(nav, vh - titleH) };
+    }
+
+    /** Past the bounds a dragged window follows less and less (rubber band);
+     *  without sac.motion it follows freely and the clamp catches it. */
+    _resist(value, min, max, size) {
+        const m = motion();
+        if (!m) return value;
+        if (value < min) return min + m.rubberband(value - min, size);
+        if (value > max) return max + m.rubberband(value - max, size);
+        return value;
+    }
+
+    /** The drag offset onto the compositor — no layout per pointer move. */
+    _moveTo() {
+        this.style.transform = `translate3d(${this._dx}px, ${this._dy}px, 0)`;
+    }
+
+    /** Write the dragged offset into the real position and drop the
+     *  transform. Snapped to the right / bottom edge = anchored there again. */
+    _commitDrag() {
+        const snap = this._snapped || {};
+        const gap = `${this._snapGap()}px`;
+        if (snap.x === 'right') { this.style.left = 'auto'; this.style.right = gap; }
+        else { this.style.left = `${Math.round(this.startLeft + (this._dx || 0))}px`; this.style.right = ''; }
+        if (snap.y === 'bottom') { this.style.top = 'auto'; this.style.bottom = gap; }
+        else { this.style.top = `${Math.round(this.startTop + (this._dy || 0))}px`; this.style.bottom = ''; }
+        this._snapped = null;
+        this.style.transform = '';
+        this.style.willChange = '';
+        this._dx = this._dy = 0;
+        this._clampToViewport();
+    }
+
+    /** A throw still in the air stops where it shows and becomes the
+     *  window's real position (it was grabbed again, or the window closed). */
+    _freezeThrow() {
+        const thr = this._throw;
+        if (!thr) return;
+        this._throw = null;
+        thr.stop();
+        this._snapped = null;
+        this._commitDrag();
+    }
+
+    /**
+     * Let go of a drag. A finger or a pen throws the window on at the speed
+     * it moved — never further out than wholly in view, never further in
+     * than where it was let go; a mouse leaves it where it is, as desktop
+     * windows do. Either way it comes to rest inside the bounds, carried
+     * there by a spring instead of a jump. `t` is the release's timestamp
+     * (null = cancelled: no throw).
+     */
+    _release(t) {
+        const m = motion();
+        const w = this._dragW, h = this._dragH;
+        const b = this._bounds(w);
+        const left0 = this.startLeft + this._dx;
+        const top0 = this.startTop + this._dy;
+        const throwing = m && t !== null && this._dragType !== 'mouse';
+        const vx = throwing ? this._trackX.velocity(t) : 0;
+        const vy = throwing ? this._trackY.velocity(t) : 0;
+
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const nav = this._navBottom();
+        const inset = this.hasAttribute('snap') ? this._snapGap() : 0;
+        const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+        const land = (pos, v, lo, hi, full0, full1) => {
+            const reach = m && v ? m.project(v) : 0;
+            if (!reach) return clamp(pos, lo, hi);
+            const fullHi = Math.max(full0, full1);
+            return clamp(clamp(pos + reach, Math.min(full0, pos), Math.max(fullHi, pos)), lo, hi);
+        };
+        let left = land(left0, vx, b.minLeft, b.maxLeft, inset, vw - inset - w);
+        let top = land(top0, vy, b.minTop, b.maxTop, nav + inset, vh - inset - h);
+        if (this.hasAttribute('snap')) ({ left, top } = this._snapPoint(left, top));
+
+        if (!m || (Math.abs(left - left0) < 0.5 && Math.abs(top - top0) < 0.5)) {
+            this._dx = left - this.startLeft;
+            this._dy = top - this.startTop;
+            this._commitDrag();
+            return;
+        }
+        const fling = Math.hypot(vx, vy) > SacWindow.FLICK;
+        const opts = { damping: fling ? 0.8 : 1, response: 0.4 };
+        const sx = m.spring({ from: left0, to: left, velocity: vx, ...opts,
+            onUpdate: (x) => { this._dx = x - this.startLeft; this._moveTo(); } });
+        const sy = m.spring({ from: top0, to: top, velocity: vy, ...opts,
+            onUpdate: (y) => { this._dy = y - this.startTop; this._moveTo(); } });
+        const thr = this._throw = { stop: () => { sx.stop(); sy.stop(); } };
+        Promise.all([sx.done, sy.done]).then(() => {
+            if (this._throw !== thr) return;     // frozen (grabbed again) meanwhile
+            this._throw = null;
+            this._commitDrag();
+        });
     }
 
     /** Is the window held by its right / bottom edge right now? */
@@ -549,6 +872,27 @@ class SacWindow extends HTMLElement {
     }
 
     setupEventListeners() {
+        // Toolbar slot: shown only when filled; the hairline under it only
+        // while the content is scrolled.
+        const container = this.shadowRoot.querySelector('.window-container');
+        const barSlot = this.shadowRoot.querySelector('slot[name="toolbar"]');
+        const content = this.shadowRoot.querySelector('.content');
+        const syncBar = () => container.classList.toggle('has-toolbar', barSlot.assignedNodes().some(
+            (n) => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())));
+        barSlot.addEventListener('slotchange', syncBar);
+        syncBar();
+        content.addEventListener('scroll', () => {
+            container.classList.toggle('scrolled', content.scrollTop > 0);
+        }, { passive: true });
+
+        // A covered window comes forward the moment it is pressed — anywhere
+        // in it, in the capture phase, so before a drag or a click handler
+        // runs (z-index never touches the pointer capture a drag takes) —
+        // or the moment focus moves into it (Tab, a dialog handing focus
+        // back): nobody types into a window they cannot see.
+        this.addEventListener('pointerdown', () => this.bringToFront(), true);
+        this.addEventListener('focusin', () => this.bringToFront());
+
         const titleBar = this.shadowRoot.querySelector('.title-bar');
         const closeBtn = this.shadowRoot.getElementById('window-close-btn');
         const minBtn = this.shadowRoot.getElementById('window-min-btn');
@@ -590,12 +934,21 @@ class SacWindow extends HTMLElement {
             e.stopPropagation();
         }, { passive: true });
 
-        // DRAG — works while minimized, never while maximized.
-        titleBar.addEventListener('mousedown', (e) => {
+        // DRAG — works while minimized, never while maximized. Pointer
+        // events, so a finger or a pen moves a window as a mouse does; the
+        // capture keeps the drag when the pointer outruns the bar.
+        titleBar.addEventListener('pointerdown', (e) => {
             if (e.target.closest('button')) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
             if (this._windowState === 'maximized' || this.hasAttribute('compact')) return;
+            if (this.isDragging || this.isResizing) return;
+            // Caught mid-throw: it stays where it shows, the drag goes on from there.
+            this._freezeThrow();
             this._detachAnchor();
             this.isDragging = true;
+            this._dragPointer = e.pointerId;
+            this._dragType = e.pointerType;
+            titleBar.setPointerCapture(e.pointerId);
             this.startX = e.clientX;
             this.startY = e.clientY;
 
@@ -604,71 +957,68 @@ class SacWindow extends HTMLElement {
             this.startTop = rect.top;
             this._dragW = rect.width;
             this._dragH = rect.height;
+            this._dx = this._dy = 0;
             this._snapped = null;
+            const m = motion();
+            this._trackX = m ? m.tracker() : null;
+            this._trackY = m ? m.tracker() : null;
+            this._trackX?.add(0, e.timeStamp);
+            this._trackY?.add(0, e.timeStamp);
             // A drag is a compositor move: the window rides a transform on
             // its own layer — no layout, no repaint of the glass blur and
-            // the big shadow per mouse event, which is what made it trail
-            // the pointer. left/top are committed once, on release.
+            // the big shadow per pointer event, which is what made it trail
+            // the pointer. left/top are committed once, when it comes to rest.
             this.style.willChange = 'transform';
-
-            document.addEventListener('mousemove', this.onMouseMove);
-            document.addEventListener('mouseup', this.onMouseUp);
             e.preventDefault();
         });
+        titleBar.addEventListener('pointermove', (e) => {
+            if (!this.isDragging || e.pointerId !== this._dragPointer) return;
+            const b = this._bounds(this._dragW);
+            const left = this._resist(this.startLeft + e.clientX - this.startX, b.minLeft, b.maxLeft, this._dragW);
+            const top = this._resist(this.startTop + e.clientY - this.startY, b.minTop, b.maxTop, this._dragH);
+            this._dx = left - this.startLeft;
+            this._dy = top - this.startTop;
+            if (this.hasAttribute('snap')) this._snapDrag();
+            this._moveTo();
+            this._trackX?.add(this._dx, e.timeStamp);
+            this._trackY?.add(this._dy, e.timeStamp);
+        });
+        const endDrag = (e) => {
+            if (!this.isDragging || e.pointerId !== this._dragPointer) return;
+            this.isDragging = false;
+            this._release(e.type === 'pointerup' ? e.timeStamp : null);
+        };
+        titleBar.addEventListener('pointerup', endDrag);
+        titleBar.addEventListener('pointercancel', endDrag);
 
         // RESIZE — the handle is hidden in both states, the guard is belt
         // and braces for a programmatic dispatch.
-        resizeHandle.addEventListener('mousedown', (e) => {
-            if (this._windowState !== 'normal') return;
+        resizeHandle.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            if (this._windowState !== 'normal' || this.isDragging || this.isResizing) return;
+            this._freezeThrow();
             this._detachAnchor();
             this.isResizing = true;
+            this._resizePointer = e.pointerId;
+            resizeHandle.setPointerCapture(e.pointerId);
             this.startX = e.clientX;
             this.startY = e.clientY;
             this.startWidth = this.offsetWidth;
             this.startHeight = this.offsetHeight;
-
-            document.addEventListener('mousemove', this.onMouseMove);
-            document.addEventListener('mouseup', this.onMouseUp);
             e.preventDefault();
         });
-
-        this.onMouseMove = (e) => {
-            if (this.isDragging) {
-                this._dx = e.clientX - this.startX;
-                this._dy = e.clientY - this.startY;
-                if (this.hasAttribute('snap')) this._snapDrag();
-                this.style.transform = `translate3d(${this._dx}px, ${this._dy}px, 0)`;
-            }
-            if (this.isResizing) {
-                const dx = e.clientX - this.startX;
-                const dy = e.clientY - this.startY;
-                this.style.width = `${Math.max(200, this.startWidth + dx)}px`;
-                this.style.height = `${Math.max(150, this.startHeight + dy)}px`;
-            }
+        resizeHandle.addEventListener('pointermove', (e) => {
+            if (!this.isResizing || e.pointerId !== this._resizePointer) return;
+            const dx = e.clientX - this.startX;
+            const dy = e.clientY - this.startY;
+            this.style.width = `${Math.max(200, this.startWidth + dx)}px`;
+            this.style.height = `${Math.max(150, this.startHeight + dy)}px`;
+        });
+        const endResize = (e) => {
+            if (e.pointerId === this._resizePointer) this.isResizing = false;
         };
-
-        this.onMouseUp = () => {
-            const wasDragging = this.isDragging;
-            if (wasDragging) {
-                // Commit the transform to the real position, then drop it.
-                // Snapped to the right / bottom edge = anchored there again.
-                const snap = this._snapped || {};
-                const gap = `${this._snapGap()}px`;
-                if (snap.x === 'right') { this.style.left = 'auto'; this.style.right = gap; }
-                else { this.style.left = `${Math.round(this.startLeft + (this._dx || 0))}px`; this.style.right = ''; }
-                if (snap.y === 'bottom') { this.style.top = 'auto'; this.style.bottom = gap; }
-                else { this.style.top = `${Math.round(this.startTop + (this._dy || 0))}px`; this.style.bottom = ''; }
-                this._snapped = null;
-                this.style.transform = '';
-                this.style.willChange = '';
-                this._dx = this._dy = 0;
-            }
-            this.isDragging = false;
-            this.isResizing = false;
-            document.removeEventListener('mousemove', this.onMouseMove);
-            document.removeEventListener('mouseup', this.onMouseUp);
-            if (wasDragging) this._clampToViewport();
-        };
+        resizeHandle.addEventListener('pointerup', endResize);
+        resizeHandle.addEventListener('pointercancel', endResize);
     }
 
     /* ---------------------------------------------------------------------
@@ -815,15 +1165,9 @@ class SacWindow extends HTMLElement {
         const rect = this.getBoundingClientRect();
         if (!rect.width && !rect.height) return;
 
-        const nav = this._navBottom();
-        const vw = document.documentElement.clientWidth;
-        const vh = document.documentElement.clientHeight;
-        const titleBar = this.shadowRoot.querySelector('.title-bar');
-        const titleH = titleBar ? titleBar.offsetHeight : 44;
-        const keep = Math.min(SacWindow.MIN_VISIBLE, rect.width);
-
-        const left = Math.min(Math.max(rect.left, keep - rect.width), vw - keep);
-        const top = Math.min(Math.max(rect.top, nav), Math.max(nav, vh - titleH));
+        const b = this._bounds(rect.width);
+        const left = Math.min(Math.max(rect.left, b.minLeft), b.maxLeft);
+        const top = Math.min(Math.max(rect.top, b.minTop), b.maxTop);
 
         // An anchored axis follows its edge by itself; it is only written
         // (and so released) when the window really left the viewport.

@@ -395,6 +395,11 @@
                         color: var(--text);
                         background: var(--hover);
                     }
+                    /* Press: answers the moment it goes down. */
+                    .pan:active:not(:disabled) {
+                        background: var(--hover-strong);
+                        transition-duration: 0s;
+                    }
                     .pan:disabled { opacity: 0.3; cursor: default; }
                     .pan sac-icon { --icon-size: 14px; }
 
@@ -408,6 +413,8 @@
                     }
                     @media (hover: none) {
                         .pan:hover:not(:disabled) { color: var(--text-muted); background: none; }
+                        /* …but the press itself still shows (a touch is a hover too). */
+                        .pan:active:not(:disabled) { background: var(--hover-strong); }
                     }
 
                     @media (prefers-reduced-motion: reduce) {
@@ -498,6 +505,13 @@
                     button:hover {
                         color: var(--text);
                         background: var(--hover);
+                    }
+                    /* Press: answers the moment it goes down (the active tab
+                       keeps its own look; [disabled] takes no pointer at all).
+                       Outranks the (hover: none) reset below. */
+                    :host(:not([active])) button:active {
+                        background: var(--hover-strong);
+                        transition-duration: 0s;
                     }
                     button:focus-visible {
                         outline: 2px solid var(--accent);

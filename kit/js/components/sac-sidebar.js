@@ -192,12 +192,16 @@ class SacSidebar extends HTMLElement {
                         bottom: 0;
                         left: 0;
                         width: var(--drawer-width);
-                        z-index: 10000;
+                        /* Above every floating window (10000–18999) and the
+                           open nav with its scrim (19000), under dialogs
+                           (20000) — the same as ui.css's .sidebar[drawer]. */
+                        z-index: 19001;
                         padding-left: env(safe-area-inset-left, 0px);
                         padding-bottom: env(safe-area-inset-bottom, 0px);
                         translate: -105% 0;
                         visibility: hidden;
                         transition: translate 0.5s var(--ease-swift), visibility 0.5s;
+                        touch-action: pan-y pinch-zoom;   /* sideways = sac-nav's swipe-to-close */
                     }
                     :host([drawer][open]) {
                         translate: none;
@@ -245,6 +249,11 @@ class SacSidebar extends HTMLElement {
                                 color 0.15s var(--ease-smooth);
                 }
                 .item:hover { background: var(--hover); color: var(--text); }
+                /* Press: answers the moment it goes down. */
+                .item:active:not(.active):not([aria-disabled="true"]) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 .item:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: -2px;

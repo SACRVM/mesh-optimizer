@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+    <title>my-widget</title>
+    <!-- An add-on's API page, in the kit style guide's look. Lives as the
+         add-on repo's index.html (its GitHub Pages start page), with the
+         vendored kit/ beside it — adjust the paths if kit/ sits elsewhere.
+         showcase.css is the page look; sac.showcase writes the markup. -->
+    <link rel="stylesheet" href="../kit/css/ui.css">
+    <link rel="stylesheet" href="../kit/css/showcase.css">
+
+    <script defer src="../kit/js/lib/globals.js"></script>
+    <script defer src="../kit/js/i18n/de.js"></script>
+    <script defer src="../kit/js/lib/icons.js"></script>
+    <script defer src="../kit/js/lib/showcase.js"></script>
+    <script defer src="../kit/js/components/sac-icon.js"></script>
+    <script defer src="../kit/js/components/sac-nav.js"></script>
+    <script defer src="../kit/js/components/sac-theme-toggle.js"></script>
+    <script defer src="../kit/js/components/sac-lang-toggle.js"></script>
+    <!-- The add-on itself (and whatever it needs from the kit). -->
+    <script defer src="js/my-widget.js"></script>
+</head>
+<body class="app-page">
+    <!-- app-name: the add-on's version. brand-href: the kit's Add-ons page,
+         where every add-on is listed. -->
+    <sac-nav brand="my-widget" brand-icon="shapes" app-name="v1.0.0"
+             brand-href="https://sacrvm.github.io/sacrvm-appkit/#/styleguide/addons">
+        <div slot="context">
+            <sac-lang-toggle></sac-lang-toggle>
+            <sac-theme-toggle></sac-theme-toggle>
+        </div>
+    </sac-nav>
+
+    <div class="main-layout">
+        <div class="app-scroll">
+            <div class="sg-page" id="page"></div>
+        </div>
+    </div>
+
+    <script defer>
+        // The structure every add-on page follows: what it is, a live demo,
+        // how to use it, the API tables, the phone behaviour.
+        document.addEventListener("DOMContentLoaded", () => {
+            const { code, table, compact, note } = sac.showcase;
+            const page = document.getElementById("page");
+            page.innerHTML = `
+                <h1>&lt;my-widget&gt;</h1>
+                <p class="lead">One or two sentences: what it is and when to reach for it.
+                   Needs SACRVM APPKIT 2.24.0 or newer.</p>
+
+                <div class="sg-demo">
+                    <my-widget value="3"></my-widget>
+                </div>
+
+                <h2 id="use">Use</h2>
+                <p>Vendor the release ZIP's <code>js/</code> beside your kit and load it after the kit.</p>
+                ${code(`<script defer src="js/my-widget.js"><\/script>
+<my-widget value="3"></my-widget>`)}
+
+                <h2 id="api">API</h2>
+                ${table("Attribute", [
+                    ["value", "The number shown."],
+                ])}
+                ${table("Event", [
+                    ["sac:change", "detail { value } after a user change. Bubbles."],
+                ])}
+                ${compact("what changes on a phone — or that nothing does.")}
+                ${note("<b>Note:</b> a caveat worth knowing before you use it.")}`;
+            sac.showcase.watchCode(page);
+        });
+    </script>
+</body>
+</html>

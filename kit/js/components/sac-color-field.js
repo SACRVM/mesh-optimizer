@@ -27,23 +27,48 @@
  *              label line at all. Also becomes the hex input's accessible name.
  *   disabled — greys the row out, blocks both the well and the input, and
  *              closes the popover if it was open.
+ *   size     — absent = the form row above; "cell" = the cell-editor
+ *              contract (borderless, fills its container, no label; a
+ *              small swatch + the hex text; Alt+↓ opens the picker; Enter /
+ *              Escape / Tab per style guide → Cell editors).
  *
  * Properties:
  *   value — get/set, normalized lowercase hex. Setting is programmatic: the
  *           well, the hex input and an open popover update in place and NO
  *           event is fired (events mean "the user did this").
+ *   focus({ select }) — focuses the hex input; select: true selects its text.
  *
  * Events:
  *   sac:change — detail { value } — the normalized hex, on USER changes
- *                      only: a committed hex entry, or any picker interaction.
- *                      Bubbles + composed. The picker's own event is stopped at
- *                      the boundary, so apps see exactly one.
+ *                      only: a committed hex entry, or any picker interaction
+ *                      (live while dragging), and once more when Escape takes
+ *                      the popover's changes back. Bubbles, not composed. The
+ *                      picker's own event is stopped at the boundary, so apps
+ *                      see exactly one.
+ *   sac:commit / sac:cancel — size="cell" only (style guide → Cell editors).
  *
  * Keyboard:
  *   on the well     — Enter / Space / ArrowDown open the popover, focus moves
- *                     into the picker; Escape closes it and comes back.
+ *                     into the picker. Escape closes it and comes back AND
+ *                     restores the colour the field had when it opened (one
+ *                     sac:change if that differs); an outside click or a
+ *                     re-click on the well keeps the new colour. Under
+ *                     size="cell" Escape only closes (the cell's own Escape
+ *                     restores — sac:cancel).
  *   in the hex input— Enter commits, Escape reverts to the last valid value.
- *                     Blurring with unparseable text reverts too.
+ *
+ * Invalid text (style guide → CSS Patterns → Field errors): while typing,
+ * unparseable text shows --danger and the input gets aria-invalid="true".
+ * Enter or focus leaving with it (or with the input emptied) shows a line
+ * under the field — "Not a color – e.g. #3b82f6" — wired with
+ * aria-describedby and announced politely. The text and the line STAY
+ * (before 2.36 the text silently reverted on blur): `value` keeps the last
+ * valid colour and no sac:change fires. Correcting the text, a picker
+ * change or Escape clears it; a programmatic value set while the input is
+ * not focused replaces the text. size="cell" sets aria-invalid only — no
+ * line, and blur / Tab still revert (the host grid owns commit and cancel).
+ *
+ * CSS parts: error (the message line).
  *
  * CSS custom properties:
  *   --picker-width — set on this field, forwarded to the popover's
@@ -64,8 +89,28 @@
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+    /* The blur of a click elsewhere fires on pointer-down. A message line
+       shown right then grows the field and can pull the click's target (a
+       Save button below) out from under the pointer before pointer-up —
+       the click is lost. So while a pointer is down, the line waits until
+       that click has landed. */
+    let pressed = false;
+    document.addEventListener("pointerdown", () => { pressed = true; }, true);
+    document.addEventListener("pointerup", () => { pressed = false; }, true);
+    document.addEventListener("pointercancel", () => { pressed = false; }, true);
+    function whenReleased(fn) {
+        if (!pressed) { fn(); return; }
+        const go = () => {
+            document.removeEventListener("pointerup", go, true);
+            document.removeEventListener("pointercancel", go, true);
+            setTimeout(fn, 0);                 // after the click that follows pointer-up
+        };
+        document.addEventListener("pointerup", go, true);
+        document.addEventListener("pointercancel", go, true);
+    }
+
 class SacColorField extends HTMLElement {
-    static get observedAttributes() { return ["value", "alpha", "label", "disabled"]; }
+    static get observedAttributes() { return ["value", "alpha", "label", "disabled", "size"]; }
 
     constructor() {
         super();
@@ -79,6 +124,10 @@ class SacColorField extends HTMLElement {
         this._popover = null;
         this._picker = null;
         this._lowerTimer = null;   // top-layer exit, delayed past the fade
+        this._snapshot = "";       // value when focus entered (size="cell" cancel)
+        this._inside = false;
+        this._openSnapshot = "";   // value when the popover opened (Escape restores it)
+        this._errorShown = false;  // the message line is up (form mode)
 
         this._onDocPointer = this._onDocPointer.bind(this);
         this._onDocKeydown = this._onDocKeydown.bind(this);
@@ -120,6 +169,7 @@ class SacColorField extends HTMLElement {
             case "alpha":    this._onAlphaAttr();  break;
             case "label":    this._syncLabel();    break;
             case "disabled": this._syncDisabled(); break;
+            case "size":     this._syncSize();     break;
         }
     }
 
@@ -127,9 +177,32 @@ class SacColorField extends HTMLElement {
 
     get value() { return this._format(); }
     set value(v) { this.setAttribute("value", v == null ? "" : String(v)); }
+    /** "" while the hex text can commit, else the words the line under the
+     *  field shows. An emptied input counts only once a commit was refused
+     *  (mid-typing it is a fresh start). `value` keeps the last valid colour
+     *  meanwhile — a form holds its Save on this. */
+    get validationMessage() {
+        if (!this._input) return "";
+        if (this._input.value.trim() === "" && !this._errorShown) return "";
+        return this._judge().error || "";
+    }
 
     get disabled() { return this.hasAttribute("disabled"); }
     set disabled(v) { if (v) this.setAttribute("disabled", ""); else this.removeAttribute("disabled"); }
+
+    focus(opts) {
+        if (!this._input) return super.focus(opts);
+        this._input.focus(opts);
+        if (opts && opts.select) this._input.select();
+    }
+
+    _cell() { return this.getAttribute("size") === "cell"; }
+
+    /** Cell editors keep the well out of the tab order: Tab leaves the field. */
+    _syncSize() {
+        if (this._cell()) this._well.tabIndex = -1;
+        else this._well.removeAttribute("tabindex");
+    }
 
     /* ------------------------------------------------------------ color math */
 
@@ -173,6 +246,7 @@ class SacColorField extends HTMLElement {
         if (!this.hasAttribute("alpha")) this._rgba.a = 1;
         this._syncLabel();
         this._syncDisabled();
+        this._syncSize();
         this._reflect();
         this._syncUI();
     }
@@ -210,6 +284,9 @@ class SacColorField extends HTMLElement {
         const parsed = this._parse(this.getAttribute("value"));
         if (!parsed) { this._reflect(); return; }   // garbage in → last valid back out
         if (!this.hasAttribute("alpha")) parsed.a = 1;
+        // Invalid text left standing after blur is replaced by an app's
+        // value (a form reset, the next record); typing in progress is not.
+        if (this._dirty && this.shadowRoot.activeElement !== this._input) this._dirty = false;
         this._apply(parsed, false);
     }
 
@@ -232,7 +309,8 @@ class SacColorField extends HTMLElement {
         if (!this._dirty) {
             const hex = this._format();
             if (this._input.value !== hex) this._input.value = hex;
-            this._input.classList.remove("invalid");
+            this._setInvalid(false);
+            this._showError(null);
         }
         // Seed an open popover too — but never mid-drag, when the picker is
         // the one talking (writing back would fight its own thumb).
@@ -255,6 +333,7 @@ class SacColorField extends HTMLElement {
         this._syncLabel();
         this._well.setAttribute("aria-label", t("color-field.choose-color", "Choose color"));
         if (this._popover) this._popover.setAttribute("aria-label", t("color-field.color-picker", "Color picker"));
+        if (this._dirty) this._markValidity();      // the message in the new language
     }
 
     _syncDisabled() {
@@ -327,9 +406,15 @@ class SacColorField extends HTMLElement {
                     background: var(--field);
                     overflow: hidden;
                     cursor: pointer;
-                    transition: border-color 150ms var(--ease-smooth);
+                    transition: border-color 150ms var(--ease-smooth),
+                                transform 0.2s var(--ease-smooth);
                 }
                 .well:hover:not(:disabled) { border-color: var(--accent); }
+                /* Press: answers the moment it goes down. */
+                .well:active:not(:disabled) {
+                    transform: scale(0.97);
+                    transition-duration: 0.1s;
+                }
                 .well:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;
@@ -360,7 +445,7 @@ class SacColorField extends HTMLElement {
                     height: 32px;              /* control-row height, see .well */
                     box-sizing: border-box;
                     padding: 0.35rem 0.5rem;
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-family: var(--font-mono);
                     font-size: 0.78rem;
                     color: var(--text);
                     background: var(--field);
@@ -388,6 +473,19 @@ class SacColorField extends HTMLElement {
                     border-color: var(--accent);
                     border-bottom-color: var(--danger);
                 }
+
+                /* The field-error line (ui.css .field-error, re-stated):
+                   always in the tree so the polite live region announces,
+                   empty — and so nothing — while the text is valid. It
+                   wraps inside the field's width instead of widening it
+                   (contain: inline-size). */
+                .error {
+                    contain: inline-size;
+                    font-size: 0.75rem;
+                    line-height: 1.35;
+                    color: var(--danger-text);
+                }
+                .error:not(:empty) { margin-top: 0.3rem; }
 
                 /* Dropdown level — same layer and behavior family as sac-menu:
                    position: fixed, shown in the top layer (popover), so neither
@@ -454,6 +552,50 @@ class SacColorField extends HTMLElement {
                    case at 240px. */
                 .popover sac-color-picker { --picker-width: inherit; }
 
+                /* size="cell" — the cell-editor contract: borderless, fills
+                   the cell, the cell's font, no label, no own focus ring. */
+                :host([size="cell"]) {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    font: inherit;
+                    color: inherit;
+                }
+                :host([size="cell"]) .label,
+                :host([size="cell"]) .error { display: none; }
+                :host([size="cell"]) .row {
+                    height: 100%;
+                    gap: 6px;
+                    padding-left: var(--cell-padding-inline, 8px);
+                }
+                :host([size="cell"]) .well,
+                :host([size="cell"]) .well:hover {
+                    width: 1.15em;
+                    height: 1.15em;
+                    border-color: var(--border-strong);
+                    border-radius: var(--radius-s);
+                }
+                :host([size="cell"]) .well:focus-visible { outline-offset: 1px; }
+                :host([size="cell"]) .hex,
+                :host([size="cell"]) .hex:hover,
+                :host([size="cell"]) .hex:focus {
+                    width: 100%;
+                    height: 100%;
+                    padding: 0 var(--cell-padding-inline, 8px) 0 0;
+                    font: inherit;
+                    font-family: var(--font-mono);
+                    color: inherit;
+                    background: transparent;
+                    border: 0;
+                    border-radius: 0;
+                    box-shadow: none;
+                }
+                :host([size="cell"]) .hex.invalid { color: var(--danger-text); }
+                @media (pointer: coarse) {
+                    :host([size="cell"]) .well { width: 1.15em; height: 1.15em; }
+                    :host([size="cell"]) .hex { height: 100%; font-size: max(16px, 1em); }
+                }
+
                 @media (prefers-reduced-motion: reduce) {
                     .popover,
                     .popover.open {
@@ -461,6 +603,15 @@ class SacColorField extends HTMLElement {
                         transform: none;
                     }
                     .well, .hex { transition: none; }
+                }
+
+                /* Reduced transparency / more contrast: the blurred popover
+                   turns solid; under more contrast its edge shows clearly. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .popover { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    .popover { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
                 }
             </style>
             <label class="label" for="hex" hidden></label>
@@ -470,14 +621,16 @@ class SacColorField extends HTMLElement {
                     <span class="checker"></span><span class="fill"></span>
                 </button>
                 <input class="hex" id="hex" type="text" aria-label="${L.hex}"
-                       spellcheck="false" autocomplete="off" autocapitalize="off">
+                       spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="error">
             </div>
+            <div class="error" part="error" id="error" aria-live="polite"></div>
         `;
 
         this._labelEl = this.shadowRoot.querySelector(".label");
         this._well    = this.shadowRoot.getElementById("well");
         this._fill    = this.shadowRoot.querySelector(".fill");
         this._input   = this.shadowRoot.getElementById("hex");
+        this._errorEl = this.shadowRoot.getElementById("error");
 
         // Enter/Space already arrive as a click on a native button; ArrowDown
         // is the extra combobox-style opener.
@@ -498,18 +651,117 @@ class SacColorField extends HTMLElement {
         this._input.addEventListener("change", (e) => e.stopPropagation());
         this._input.addEventListener("keydown", (e) => this._onInputKeydown(e));
         this._input.addEventListener("blur", () => this._commit(true));
+
+        // Cell contract: remember the value focus arrived with, and stop
+        // the keys the field acted on at the boundary.
+        this.addEventListener("focusin", () => {
+            if (this._inside) return;
+            this._inside = true;
+            this._snapshot = this._format();
+        });
+        this.addEventListener("focusout", (e) => {
+            if (e.relatedTarget !== this) this._inside = false;
+        });
+        this.addEventListener("keydown", (e) => this._onCellKeydown(e));
+    }
+
+    /** size="cell", on the host (after the inner handlers ran). Enter/Escape
+     *  from the hex input are handled in _onInputKeydown; here: the well and
+     *  the popover's keys, and Tab from anywhere. */
+    _onCellKeydown(e) {
+        if (!this._cell()) return;
+        const path = e.composedPath();
+        const inPopover = this._popover && path.includes(this._popover);
+        if (e.key === "Tab") {                    // never swallowed
+            this._closePopover(false);
+            this._commit(true);
+        } else if (e.key === "Enter" && inPopover) {
+            e.stopPropagation();                  // the picker took it — close; the NEXT Enter commits
+            this._closePopover(false);
+            this._input.focus();
+        } else if (e.key === "Enter" && path.includes(this._well)) {
+            e.stopPropagation();                  // the well's click toggled the popover
+        } else if (e.key === "Escape" && path.includes(this._well)) {
+            e.preventDefault();
+            e.stopPropagation();
+            this._cancel();
+        }
+    }
+
+    _cancel() {
+        this._dirty = false;
+        this._closePopover(false);
+        const parsed = this._parse(this._snapshot);
+        if (parsed) this._apply(parsed, false);
+        this._setInvalid(false);
+        this._showError(null);
+        this._input.value = this._format();
+        this._input.focus();
+        this.dispatchEvent(new CustomEvent("sac:cancel", {
+            detail: { value: this._format() }, bubbles: true, composed: true,
+        }));
     }
 
     /* ---------------------------------------------------------- hex input */
 
     _onInput() {
         this._dirty = true;
-        const raw = this._input.value;
-        const bad = raw.trim() !== "" && !this._parse(raw);
+        this._markValidity();
+    }
+
+    /** The typed text judged: { rgba } when it can commit, else { error }
+     *  — the message saying what is expected. Empty text is not a colour. */
+    _judge() {
+        const parsed = this._parse(this._input.value);
+        if (parsed) return { rgba: parsed };
+        return { error: t("color-field.error-invalid", "Not a color – e.g. {example}")
+            .replace("{example}", SacColorField.DEFAULT) };
+    }
+
+    /** Live while typing: the invalid look + aria-invalid (an emptied input
+     *  only once a commit was refused — mid-typing it is just a fresh
+     *  start); a message that is already showing follows the text, and goes
+     *  once it is valid. A NEW message waits for Enter or blur. */
+    _markValidity() {
+        const j = this._judge();
+        const empty = this._input.value.trim() === "";
+        this._setInvalid(!!j.error && (!empty || this._errorShown));
+        if (this._errorShown) this._showError(j.error || null);
+    }
+
+    _setInvalid(bad) {
         this._input.classList.toggle("invalid", bad);
+        if (bad) this._input.setAttribute("aria-invalid", "true");
+        else this._input.removeAttribute("aria-invalid");
+    }
+
+    /** The message line — form mode only; null clears it. */
+    _showError(msg) {
+        const text = msg && !this._cell() ? String(msg) : "";
+        this._errorShown = !!text;
+        if (this._errorEl && this._errorEl.textContent !== text) this._errorEl.textContent = text;
     }
 
     _onInputKeydown(e) {
+        if (this._cell()) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this._commit(false)) {
+                    this.dispatchEvent(new CustomEvent("sac:commit", {
+                        detail: { value: this._format(), shiftKey: e.shiftKey }, bubbles: true, composed: true,
+                    }));
+                }
+            } else if (e.key === "Escape" && !this._open) {
+                e.preventDefault();
+                e.stopPropagation();
+                this._cancel();
+            } else if (e.key === "ArrowDown" && e.altKey) {
+                e.preventDefault();
+                this._openPopover();
+            }
+            return;
+        }
         if (e.key === "Enter") {
             e.preventDefault();
             this._commit(false);
@@ -519,24 +771,42 @@ class SacColorField extends HTMLElement {
         }
     }
 
-    /** @param {boolean} revertOnInvalid — true on blur, false on Enter (the
-     *  user is still editing; leave the red text standing). */
+    /**
+     * @param {boolean} revertOnInvalid — size="cell" only: true on blur /
+     *   Tab (the cell contract reverts), false on Enter (the editor stays
+     *   open, marked). In form mode invalid text never reverts: it stays,
+     *   with the message line saying what is expected.
+     * @returns true when the text is a valid value (committed or unchanged).
+     */
     _commit(revertOnInvalid) {
-        if (!this._dirty) return;                 // nothing typed → never re-fire the old value
-        const parsed = this._parse(this._input.value);
-        if (!parsed) {
-            if (revertOnInvalid) this._revertInput();
-            return;
+        if (!this._dirty) return true;            // nothing typed → never re-fire the old value
+        const j = this._judge();
+        if (j.error) {
+            if (this._cell()) {
+                if (revertOnInvalid) this._revertInput();
+                else this._setInvalid(true);
+            } else {
+                this._setInvalid(true);
+                whenReleased(() => {                     // judged again: the click may have fixed it
+                    const now = this._dirty ? this._judge().error : null;
+                    if (now) this._showError(now);
+                });
+            }
+            return false;
         }
+        const parsed = j.rgba;
         if (!this.hasAttribute("alpha")) parsed.a = 1;
         this._dirty = false;
-        this._input.classList.remove("invalid");
+        this._setInvalid(false);
+        this._showError(null);
         this._apply(parsed, true);
+        return true;
     }
 
     _revertInput() {
         this._dirty = false;
-        this._input.classList.remove("invalid");
+        this._setInvalid(false);
+        this._showError(null);
         this._input.value = this._format();
     }
 
@@ -584,6 +854,7 @@ class SacColorField extends HTMLElement {
         else this._picker.removeAttribute("alpha");
         const seed = this._format();                          // seed: no event comes back
         if (seed) this._picker.setAttribute("value", seed);
+        this._openSnapshot = seed;                            // what Escape goes back to
 
         this._open = true;
         this._raise();                                        // top layer, then measure
@@ -609,7 +880,7 @@ class SacColorField extends HTMLElement {
         this._popover.classList.remove("open");
         this._lower();
         this._well.setAttribute("aria-expanded", "false");
-        if (restoreFocus && document.activeElement === this) this._well.focus();
+        if (restoreFocus && document.activeElement === this) (this._cell() ? this._input : this._well).focus();
     }
 
     /* Top layer, exactly as sac-menu: a transformed or clipping ancestor would
@@ -678,6 +949,18 @@ class SacColorField extends HTMLElement {
             e.preventDefault();
             e.stopPropagation();
             this._closePopover(true);
+            // Escape takes back what the popover changed (every drag already
+            // committed live): the colour it opened with returns, with one
+            // sac:change when it differs. size="cell" keeps its own contract
+            // — the cell's Escape (sac:cancel) restores the whole edit.
+            if (!this._cell()) {
+                const back = this._parse(this._openSnapshot);
+                if (back && this._format() !== this._openSnapshot) {
+                    if (!this.hasAttribute("alpha")) back.a = 1;
+                    this._dirty = false;
+                    this._apply(back, true);
+                }
+            }
         }
     }
 }

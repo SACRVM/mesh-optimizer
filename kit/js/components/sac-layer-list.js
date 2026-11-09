@@ -241,8 +241,25 @@
                         min-height: 0;
                         overflow-y: auto;
                         overscroll-behavior-y: contain;
-                        scrollbar-width: thin;
-                        scrollbar-color: var(--scrollbar-thumb) transparent;
+                    }
+                    /* Scrollbar — the kit recipe (ui.css §5), re-stated because
+                       ::-webkit-scrollbar does not pierce a shadow root. Firefox, which has
+                       no ::-webkit-scrollbar, gets the standard pair instead. */
+                    .list::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+                    .list::-webkit-scrollbar-track { background: transparent; }
+                    .list::-webkit-scrollbar-thumb {
+                        background: var(--scrollbar-thumb);
+                        background-clip: content-box;
+                        border: var(--scrollbar-gap) solid transparent;
+                        border-radius: 999px;
+                    }
+                    .list::-webkit-scrollbar-thumb:hover {
+                        background: var(--scrollbar-thumb-hover);
+                        background-clip: content-box;
+                    }
+                    .list::-webkit-scrollbar-corner { background: transparent; }
+                    @supports not selector(::-webkit-scrollbar) {
+                        .list { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
                     }
                     .row {
                         display: flex;
@@ -257,6 +274,9 @@
                         transition: background 0.15s, color 0.15s;
                     }
                     .row:hover { background: var(--hover); color: var(--text); }
+                    /* Press: answers the moment it goes down (not on the
+                       selected row, nor the one in flight — it keeps its lift). */
+                    .row:active:not(.active):not([data-sortable-dragging]) { background: var(--hover-strong); transition-duration: 0s; }
                     .row.active { background: var(--accent-tint); color: var(--accent-text); }
                     .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
                     .row[data-sortable-dragging] { background: var(--panel-2); box-shadow: var(--shadow-2); }
@@ -320,6 +340,11 @@
                     }
                     .tog svg, .act svg { width: var(--icon-btn-icon); height: var(--icon-btn-icon); }
                     .tog:hover, .act:hover { background: var(--hover-strong); color: var(--text); }
+                    /* Already --hover-strong on hover: the press goes one step further. */
+                    .tog:active, .act:active:not(:disabled) {
+                        background: color-mix(in srgb, var(--fg) 20%, transparent);
+                        transition-duration: 0s;
+                    }
                     .tog:focus-visible, .act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
                     /* An unlocked lock is quiet until the row is looked at. */
                     .tog.lock:not([aria-pressed="true"]) { opacity: 0.35; }

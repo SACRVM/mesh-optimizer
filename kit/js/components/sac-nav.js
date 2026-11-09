@@ -18,6 +18,10 @@
  *   brand-href — where the brand links to (default "#/", scope-aware).
  *   app-name   — accent-colored text after the brand (spacing separates the
  *                segments; no divider glyph — two icons plus a dot was noise).
+ *   app-icon   — sac.icons name rendered before app-name, in accent: a suite
+ *                whose pages are its apps reads exactly like a host showing a
+ *                hosted app. Unhosted, the phone ribbon shows it instead of
+ *                brand-icon, since the name there is the app's.
  *   compact-title — the app's name as the phone ribbon shows it (see
  *                RESPONSIVE). Absent = brand for a hosted app, else app-name,
  *                else brand. Set it where app-name is no name (a version).
@@ -80,10 +84,29 @@
  *   open() / close() / toggle() — what the burger does (the drawer on
  *          compact with a rail, else the panel). open() is a no-op when
  *          there is nothing to open.
+ *   setOverflowGroup(owner, entries) — lets ANY element contribute a group
+ *          of entries to the "…" menu (see TOOLBAR OVERFLOW). `owner` is the
+ *          key (normally the contributing element itself); `entries` is
+ *          [{ label, icon?, disabled?, danger?, run(event) }] — `run` gets
+ *          the menu's sac:select event. Pass null or [] to withdraw the
+ *          group. Re-call it to relabel (e.g. on a language switch). A group
+ *          whose owner element has left the DOM is dropped on the next
+ *          layout. <sac-shortcut-bar> uses this to fold into the nav on
+ *          compact.
  *
  * Events:
  *   sac:nav-open / sac:nav-close — detail { drawer } — the burger's panel
  *          and/or rail drawer came out / went away. Bubbles + composed.
+ *
+ * Focus (2.36): the burger's panel is modal, as the rail drawer is, at every
+ *   width — opening it moves focus onto the panel itself (no field, so no
+ *   phone keyboard; the panel is labelled "Menu"), everything outside the
+ *   nav turns inert (layers above the open menu — dialogs, tooltips, toasts
+ *   — stay live; what was inert already is left alone), and closing it
+ *   (Escape, the scrim, an entry, the burger, a swipe) hands focus back to
+ *   the burger when it was in the panel or nowhere. The entry for where you
+ *   are carries aria-current="page" — a suite entry whose own section is
+ *   the current one gets "true" (it contains the page).
  *
  * Slots:
  *   panel   — the app's OWN burger-panel content, rendered first, above the
@@ -122,7 +145,9 @@
  *     [drawer] and makes its burger the one way to open it — one burger, not
  *     two. When the panel also has entries (host nav, routes, sections) they
  *     stack above the rail in one column. The nav owns the drawer's scrim,
- *     Escape, swipe-left-to-close, closing on a link tap (a .sidebar closes
+ *     Escape, swipe-left-to-close (a finger or a pen; panel, rail and scrim
+ *     follow it 1:1, then a spring finishes the close or puts it back),
+ *     closing on a link tap (a .sidebar closes
  *     on a[href] or [data-drawer-close]; <sac-sidebar> on any item) and the
  *     focus trap (everything outside the drawer turns inert while it is out).
  *   - Safe areas: the ribbon grows by env(safe-area-inset-top) and pads its
@@ -139,8 +164,38 @@
  * folded as ONE item: its entries join the "…" menu as a group (after a
  * separator), and choosing one fires the original menu's sac:select, so the
  * app's listener runs unchanged. Mark a control data-overflow="never" to
- * keep it in the ribbon. Needs sac-menu loaded;
+ * keep it in the ribbon. Groups contributed with setOverflowGroup() follow
+ * the folded controls, each behind a separator, in contribution order; while
+ * one has entries the "…" shows at every width. Needs sac-menu loaded;
  * without it nothing overflows.
+ *
+ * TITLE BAR (an installed app that hands the window's title bar to the
+ * page): the nav IS the window's title bar. It sets [titlebar] on itself and
+ * follows the browser — the person switches the overlay on and off there:
+ *   - titlebar="overlay" — (display-mode: window-controls-overlay), from the
+ *     manifest's "display_override": ["window-controls-overlay"]. The
+ *     browser draws its minimise / maximise / close buttons over one corner
+ *     (right on Windows and Linux, left on macOS); the ribbon keeps that
+ *     corner clear (env(titlebar-area-*)), and the browser paints the
+ *     buttons on the ribbon's own colour: while the overlay is on, the nav
+ *     keeps a <meta name="theme-color"> of its own first in <head>, on the
+ *     theme the kit's flag picked. It goes when the overlay does; the
+ *     page's own theme-color metas are never touched.
+ *   - titlebar="own" — (display-mode: borderless): the browser draws no
+ *     window buttons, so the nav does — <sac-window>'s three traffic lights
+ *     at the right end, in the theme's --accent-warm / --ok / --danger, with
+ *     <sac-window>'s glyphs (− / maximise-restore / ×: shown on hover and
+ *     keyboard focus, always on touch and under more contrast). Each
+ *     one only where the browser lets a page do it (a control that does
+ *     nothing is never rendered): minimise and maximise need
+ *     window.minimize() / maximize() (Additional Windowing Controls, with
+ *     the window-management permission); close is window.close().
+ *   Both: the ribbon's free space moves the window (app-region: drag — a
+ *   double-click maximises, the browser's own behaviour), and every control
+ *   in it stays a control (no-drag: the burger, the brand and home links,
+ *   the slotted context / toolbar / host tools, the "…", the window
+ *   buttons). Height, panel and compact layout stay as they are. Only the
+ *   top window's nav: one in a frame is not at the window's edge.
  *
  * Layout contract: content below needs padding-top: 50px plus the top safe
  * area (#app-root and .main-layout in ui.css do this).
@@ -149,6 +204,10 @@
 
     /** Kit i18n: sac.t when globals.js is loaded, the English fallback when
      *  the component runs standalone. */
+    /** sac.motion when lib/motion.js is loaded; without it the drawer
+     *  still closes on a swipe, only it does not follow the finger. */
+    const motion = () => (window.sac && window.sac.motion) || null;
+
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
@@ -161,11 +220,73 @@
         "nav.menu":        "Menu",
         "nav.more":        "More",
         "nav.no-sections": "No sections yet.",
+        // The own window buttons (TITLE BAR) — <sac-window>'s keys.
+        "window.minimize": "Minimize",
+        "window.maximize": "Maximize",
+        "window.restore":  "Restore",
+        "window.close":    "Close",
     };
     const str = (key) => t(key, STRINGS[key]);
 
+    /** The own window buttons' glyphs (TITLE BAR, own) — <sac-window>'s:
+     *  minimise −, maximise ↖↘ / restore ↘↖ (two triangles), close ×. */
+    const GLYPH = {
+        min:   `<svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path d="M1.5 4.5h6"/></svg>`,
+        max:   `<svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path class="g-fill g-max" d="M1.5 1.5h3.6L1.5 5.1zM7.5 7.5H3.9L7.5 3.9z"/><path class="g-fill g-restore" d="M4 4H.9L4 .9zM5 5h3.1L5 8.1z"/></svg>`,
+        close: `<svg class="glyph" viewBox="0 0 9 9" aria-hidden="true" focusable="false"><path d="M2 2l5 5M7 2L2 7"/></svg>`,
+    };
+
+    /**
+     * The colour the browser paints its window buttons on (TITLE BAR,
+     * overlay): ONE <meta name="theme-color"> the kit owns, first in <head>
+     * so it wins over the page's own (left as they are), on the ribbon's
+     * colour. Held while any nav is the overlay's title bar; repainted when
+     * the theme flag (data-theme), an inline theme or the OS scheme changes.
+     */
+    const themeColor = {
+        navs: new Set(),
+        meta: null,
+        mo: null,
+        mq: null,
+        again: null,
+        sync(nav, on) {
+            if (on) this.navs.add(nav);
+            else this.navs.delete(nav);
+            if (!this.navs.size) return this.stop();
+            if (!this.mo) {
+                this.again = () => requestAnimationFrame(() => this.paint());
+                this.mo = new MutationObserver(this.again);
+                this.mo.observe(document.documentElement,
+                    { attributes: true, attributeFilter: ["data-theme", "style", "class"] });
+                this.mq = window.matchMedia("(prefers-color-scheme: light)");
+                this.mq.addEventListener("change", this.again);
+            }
+            this.paint();
+        },
+        stop() {
+            this.mo?.disconnect();
+            this.mq?.removeEventListener("change", this.again);
+            this.mo = this.mq = null;
+            this.meta?.remove();
+            this.meta = null;
+        },
+        paint() {
+            const nav = this.navs.values().next().value;
+            const color = nav && nav._ribbonColor();
+            if (!color) return;
+            if (!this.meta) {
+                this.meta = document.createElement("meta");
+                this.meta.name = "theme-color";
+                this.meta.dataset.sacTitlebar = "";
+                const first = document.head.querySelector('meta[name="theme-color"]');
+                document.head.insertBefore(this.meta, first);
+            }
+            this.meta.content = color;
+        },
+    };
+
 class SacNav extends HTMLElement {
-    static get observedAttributes() { return ["host-href", "host-label", "host-icon", "host-nav", "sections-nav", "rail", "compact-title"]; }
+    static get observedAttributes() { return ["brand", "brand-icon", "brand-href", "app-name", "app-icon", "host-href", "host-label", "host-icon", "host-nav", "sections-nav", "rail", "compact-title"]; }
 
     constructor() {
         super();
@@ -178,6 +299,17 @@ class SacNav extends HTMLElement {
         this._inerted = [];
         this._overflowed = [];
         this._overflowFrame = 0;
+        this._groups = new Map();     // setOverflowGroup(): owner → entries
+    }
+
+    /** Contribute (or withdraw, with null / []) a group of "…" menu entries.
+     *  See the header, Methods. */
+    setOverflowGroup(owner, entries) {
+        if (owner == null) return;
+        const list = Array.isArray(entries) ? entries.filter((e) => e && typeof e.run === "function") : [];
+        if (list.length) this._groups.set(owner, list);
+        else this._groups.delete(owner);
+        this._scheduleOverflow();
     }
 
     /** The host's injection (see header). Assign context.host in mount().
@@ -241,6 +373,13 @@ class SacNav extends HTMLElement {
     }
 
     connectedCallback() {
+        // TITLE BAR: before the first render, so it already has the window
+        // buttons. Watched — the person switches the overlay on and off,
+        // and the maximise dot names what it does now.
+        this._tbMqs = [SacNav.OVERLAY, SacNav.BORDERLESS, SacNav.MAXIMIZED].map((q) => window.matchMedia(q));
+        this._tbHandler = () => this._syncTitlebar();
+        this._tbMqs.forEach((m) => m.addEventListener("change", this._tbHandler));
+        this._syncTitlebar();
         this._mq = window.matchMedia(SacNav.COMPACT);
         this._mqHandler = () => {
             if (!this._mq.matches) this._setDrawer(false);
@@ -284,6 +423,7 @@ class SacNav extends HTMLElement {
         sr.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = str(el.dataset.i18n); });
         sr.querySelectorAll("[data-i18n-label]").forEach((el) => el.setAttribute("aria-label", str(el.dataset.i18nLabel)));
         sr.querySelectorAll("[data-i18n-title]").forEach((el) => el.setAttribute("title", str(el.dataset.i18nTitle)));
+        this._labelWinMax();
         // A shorter or longer label can change what fits in the ribbon.
         this._scheduleOverflow();
     }
@@ -297,15 +437,24 @@ class SacNav extends HTMLElement {
         if (this._offLang) { this._offLang(); this._offLang = null; }
         if (this._escHandler)   document.removeEventListener("keydown", this._escHandler);
         if (this._hashHandler)  window.removeEventListener("hashchange", this._hashHandler);
-        if (this._routeHandler) window.removeEventListener("sac:route-registered", this._routeHandler);
+        if (this._routeHandler) {
+            window.removeEventListener("sac:route-registered", this._routeHandler);
+            window.removeEventListener("sac:route-unregistered", this._routeHandler);
+        }
         if (this._scopeHandler) window.removeEventListener("sac:scope-changed", this._scopeHandler);
         if (this._hostChangedHandler) document.removeEventListener("sac:host-changed", this._hostChangedHandler);
         this._mq?.removeEventListener("change", this._mqHandler);
+        this._tbMqs?.forEach((m) => m.removeEventListener("change", this._tbHandler));
+        themeColor.sync(this, false);
+        this._dprMq?.removeEventListener("change", this._dprHandler);
+        this._dprMq = null;
         this._ro?.disconnect();
         this._mo?.disconnect();
         cancelAnimationFrame(this._overflowFrame);
         this._setDrawer(false);
         this._releaseRail();
+        // Removed with the panel out: give the page back.
+        this._setInert(false);
     }
 
     render() {
@@ -313,6 +462,7 @@ class SacNav extends HTMLElement {
         const brandIcon = this.getAttribute("brand-icon") || "";
         const brandHref = this.getAttribute("brand-href") || "#/";
         const appName   = this.getAttribute("app-name") || "";
+        const appIcon   = appName ? (this.getAttribute("app-icon") || "") : "";
         // The host's presence in the app's own chrome (see the header).
         // The `host` property is the full injection; the host-* attributes
         // remain as the static-page form of the jump alone.
@@ -341,11 +491,18 @@ class SacNav extends HTMLElement {
         // IS one: the brand of a hosted app, or an app-name.
         const titleAccent = !!hostHref ||
             (!this.getAttribute("compact-title") && !!appName);
+        // Unhosted, the phone's name is the app's, so its icon is too.
+        const cidIcon = (!hostHref && appIcon) || brandIcon;
         const panelHostNav  = hideHost ? [] : hostNav;
         const hasSlotted = !!this.querySelector(':scope > [slot="panel"]');
         this._hasSlotted = hasSlotted;
 
         const routes = (window.sac?.router?.routes() || []).filter(r => r.hash !== "#/")
+            // nav: false — a route the host lists its own way (sac.router.register).
+            .filter(r => r.nav !== false)
+            // A route bound to one kind of workspace (scope: "root"/"scoped")
+            // is left out of the other — re-checked on sac:scope-changed.
+            .filter(r => !sac.router.inScope || sac.router.inScope(r))
             // On a shared page (launcher pattern) the router carries the
             // host's destinations too — the host group already lists those,
             // so the app's own group drops the duplicates.
@@ -381,6 +538,10 @@ class SacNav extends HTMLElement {
         // ribbon shows just the app's name ("titled"); opening it swaps in
         // the desktop brand row. Without a burger the brand row stays.
         const titled = compact && showBurger && !!compactTitle;
+        // TITLE BAR, own: the window buttons the browser lets a page drive.
+        const own    = this.getAttribute("titlebar") === "own";
+        const canMin = own && typeof window.minimize === "function";
+        const canMax = own && typeof window.maximize === "function";
 
         // Kit strings: attribute position gets quote-escaping, the empty
         // state is a text node and gets &/< escaping instead.
@@ -391,10 +552,22 @@ class SacNav extends HTMLElement {
             home:       esc(str("nav.home")),
             more:       esc(str("nav.more")),
             noSections: escText(str("nav.no-sections")),
+            minimize:   esc(str("window.minimize")),
+            close:      esc(str("window.close")),
         };
         // A kit default (not the host's own label) carries its key for _relabel().
         const keyTitle = hostLabel ? `` : ` data-i18n-title="nav.home"`;
         const keyText  = (key) => hostLabel ? `` : ` data-i18n="${key}"`;
+        // The entry for where you are says so to assistive tech too. The
+        // suite entry whose own section is the current one is "true" (it
+        // contains the page) — "page" belongs to one entry only.
+        const cur = (on, kind = "page") => on ? ` aria-current="${kind}"` : ``;
+
+        // A re-render replaces every node: focus on the burger or inside the
+        // open panel would fall to <body>. Note where it was, put it back.
+        const had = this.shadowRoot.activeElement;
+        const refocus = !had ? null : had.classList.contains("menu-btn") ? "burger"
+            : had.closest(".panel") ? "panel" : null;
 
         this.shadowRoot.innerHTML = `
             <style>
@@ -409,14 +582,18 @@ class SacNav extends HTMLElement {
                    dialogs — the menu is never covered by a window. */
                 :host([menu-open]) { z-index: 19000; }
                 .ribbon {
+                    /* The corner under the browser's window buttons (TITLE
+                       BAR, overlay) — none anywhere else. */
+                    --tb-left: 0px;
+                    --tb-right: 0px;
                     height: 50px;
                     display: flex;
                     align-items: center;
                     padding: 0 1rem;
                     /* content-box: the notch inset adds to the 50px. */
                     padding-top: env(safe-area-inset-top, 0px);
-                    padding-left: calc(1rem + env(safe-area-inset-left, 0px));
-                    padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+                    padding-left: calc(1rem + env(safe-area-inset-left, 0px) + var(--tb-left));
+                    padding-right: calc(1rem + env(safe-area-inset-right, 0px) + var(--tb-right));
                     background: var(--glass-strong);
                     backdrop-filter: blur(12px);
                     -webkit-backdrop-filter: blur(12px);
@@ -436,27 +613,35 @@ class SacNav extends HTMLElement {
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
-                    gap: 4px;
+                    gap: var(--bar-gap, 4px);
                     padding: 0;
                     flex: none;
                 }
                 .menu-btn:hover { background: var(--hover); }
+                /* Press: answers the moment it goes down. */
+                .menu-btn:active { background: var(--hover-strong); transition-duration: 0s; }
                 .menu-btn:focus-visible,
                 .more-btn:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;
                 }
+                /* Thickness and gap are whole device pixels (_snapBurger): at
+                   125% / 175% a 2px line is 2.5 device pixels, and the
+                   half-lit row fell above one line and below the next —
+                   three lines, three thicknesses. On the device grid the
+                   three share one offset, so they rasterize alike. */
                 .menu-btn span {
                     display: block;
                     width: 18px;
-                    height: 2px;
+                    height: var(--bar-h, 2px);
                     background: var(--text);
                     border-radius: var(--radius-s);
-                    transition: all 0.3s ease;
+                    /* Not "all": the snapped size and shift must not animate. */
+                    transition: transform 0.3s ease, opacity 0.3s ease;
                 }
-                .menu-btn.active span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+                .menu-btn.active span:nth-child(1) { transform: translateY(var(--bar-pitch, 6px)) rotate(45deg); }
                 .menu-btn.active span:nth-child(2) { opacity: 0; }
-                .menu-btn.active span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+                .menu-btn.active span:nth-child(3) { transform: translateY(calc(-1 * var(--bar-pitch, 6px))) rotate(-45deg); }
                 /* Icon-to-text spacing is the .brand gap alone (0.5rem) — a
                    margin here on top of it doubled the space. */
                 .brand-mark {
@@ -482,6 +667,9 @@ class SacNav extends HTMLElement {
                 .brand-mark { flex: none; }
                 .brand > span:not(.brand-mark) { overflow: hidden; text-overflow: ellipsis; }
                 .brand .app-name { color: var(--accent); }
+                /* An app segment with its own icon sits as far from the brand
+                   as a hosted app from its host (.host-jump: 0.9rem). */
+                .brand .app-mark { margin-left: 0.4rem; }
 
                 /* The host's injected presence renders with the BRAND recipe —
                    one title-bar style everywhere: host, then the app's segment
@@ -580,6 +768,7 @@ class SacNav extends HTMLElement {
                     transition: background 0.2s var(--ease-smooth), color 0.2s var(--ease-smooth);
                 }
                 .more-btn:hover { background: var(--hover); color: var(--text); }
+                .more-btn:active { background: var(--hover-strong); transition-duration: 0s; }
 
                 .backdrop {
                     position: fixed;
@@ -603,6 +792,9 @@ class SacNav extends HTMLElement {
                     transform: translateX(-110%);
                     visibility: hidden;
                     transition: transform 0.5s var(--ease-swift), visibility 0.5s;
+                    /* Scrolls up and down natively; a sideways finger is the
+                       swipe-to-close (see _swipeStart). */
+                    touch-action: pan-y pinch-zoom;
                     z-index: 2;
                     padding: 1.5rem 0;
                     overflow-y: auto;
@@ -610,12 +802,12 @@ class SacNav extends HTMLElement {
                 /* Scrollbar — the kit recipe (ui.css §5), re-stated because
                    ::-webkit-scrollbar does not pierce a shadow root. Firefox, which has
                    no ::-webkit-scrollbar, gets the standard pair instead. */
-                .panel::-webkit-scrollbar { width: 10px; height: 10px; }
+                .panel::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
                 .panel::-webkit-scrollbar-track { background: transparent; }
                 .panel::-webkit-scrollbar-thumb {
                     background: var(--scrollbar-thumb);
                     background-clip: content-box;
-                    border: 2px solid transparent;
+                    border: var(--scrollbar-gap) solid transparent;
                     border-radius: 999px;
                 }
                 .panel::-webkit-scrollbar-thumb:hover {
@@ -629,7 +821,15 @@ class SacNav extends HTMLElement {
                 .panel.open {
                     transform: translateX(0);
                     visibility: visible;
+                    /* Visible at once on the way in (it is off-screen until
+                       the slide brings it): focus moves onto it in the same
+                       task, and a visibility transition would still read
+                       "hidden" there. Closing keeps the 0.5s delay above. */
+                    transition: transform 0.5s var(--ease-swift), visibility 0s;
                 }
+                /* Focus lands on the panel itself when it opens (no field,
+                   so no phone keyboard): a container, no ring. */
+                .panel:focus { outline: none; }
                 /* Compact with a rail: the panel's entries stack ABOVE the
                    rail drawer in one column — the rail starts where the
                    panel ends (--drawer-top, measured on open). */
@@ -671,6 +871,7 @@ class SacNav extends HTMLElement {
                 }
                 .panel.rail-look .nav-item sac-icon { --icon-size: 16px; }
                 .panel.rail-look .nav-item:hover { background: var(--hover); color: var(--text); }
+                .panel.rail-look .nav-item:active:not(.active) { background: var(--hover-strong); transition-duration: 0s; }
                 .panel.rail-look .nav-item.active {
                     background: var(--accent-tint);
                     color: var(--accent-text);
@@ -704,6 +905,7 @@ class SacNav extends HTMLElement {
                     background: color-mix(in srgb, var(--fg) 5%, transparent);
                     color: var(--text);
                 }
+                .nav-item:active:not(.active) { background: var(--hover-strong); transition-duration: 0s; }
                 .nav-item.active {
                     background: var(--accent-tint);
                     color: var(--accent);
@@ -760,10 +962,87 @@ class SacNav extends HTMLElement {
                     border-left: 1px solid var(--border);
                 }
 
+                /* TITLE BAR (see the header): the free space moves the
+                   window, every control stays a control. */
+                :host([titlebar]) .ribbon { -webkit-app-region: drag; app-region: drag; }
+                :host([titlebar]) .menu-btn,
+                :host([titlebar]) .brand,
+                :host([titlebar]) .compact-id a,
+                :host([titlebar]) .more,
+                :host([titlebar]) .win-ctrls,
+                :host([titlebar]) ::slotted(*) { -webkit-app-region: no-drag; app-region: no-drag; }
+                /* Overlay: nothing under the browser's window buttons — the
+                   titlebar area is what the page may use, left and right of
+                   it are the buttons (macOS left, Windows / Linux right). */
+                :host([titlebar="overlay"]) .ribbon {
+                    --tb-left: env(titlebar-area-x, 0px);
+                    --tb-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+                }
+                /* Own: <sac-window>'s traffic lights, the same recipe —
+                   colour carries the meaning, title/aria-label the words. */
+                .win-ctrls {
+                    flex: none;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-left: 0.75rem;
+                }
+                .win-btn {
+                    --btn-color: var(--danger);
+                    width: 15px;
+                    height: 15px;
+                    border-radius: 50%;
+                    background: var(--btn-color);
+                    cursor: pointer;
+                    border: none;
+                    padding: 0;
+                    transition: transform 0.2s, background 0.2s;
+                    position: relative;
+                }
+                .win-btn:hover {
+                    transform: scale(1.1);
+                    background: color-mix(in oklab, var(--btn-color) 80%, var(--lift));
+                }
+                .win-btn:active { transform: scale(0.97); transition-duration: 0.1s; }
+                .win-btn:focus-visible {
+                    outline: 2px solid var(--accent);
+                    outline-offset: 2px;
+                }
+                .win-btn.min-btn { --btn-color: var(--accent-warm); }
+                .win-btn.max-btn { --btn-color: var(--ok); }
+                .win-btn.close-btn { --btn-color: var(--danger); }
+                /* Glyphs in the dots (<sac-window>'s recipe): shown while the
+                   group is hovered or keyboard-focused, always on touch and
+                   under more contrast — colour never carries the meaning
+                   alone. Ink = the dot's own colour sunk dark (the kit's
+                   --on-warm / --on-ok recipe), so every theme follows. */
+                .win-btn { --glyph-ink: color-mix(in srgb, var(--sink) 62%, var(--btn-color)); }
+                .win-btn .glyph {
+                    position: absolute;
+                    left: 20%;
+                    top: 20%;
+                    width: 60%;
+                    height: 60%;
+                    fill: none;
+                    stroke: var(--glyph-ink);
+                    stroke-width: 1.25;
+                    stroke-linecap: round;
+                    opacity: 0;
+                    transition: opacity 0.12s var(--ease-smooth);
+                    pointer-events: none;
+                }
+                .win-btn .glyph .g-fill { fill: var(--glyph-ink); stroke: none; }
+                .win-btn .g-restore,
+                .win-btn.restore .g-max { display: none; }
+                .win-btn.restore .g-restore { display: inline; }
+                .win-ctrls:hover .glyph { opacity: 1; }
+                .win-ctrls:has(:focus-visible) .glyph { opacity: 1; }
+                .ground-probe { background-color: var(--bg); }
+
                 @media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
                     .ribbon {
-                        padding-left: calc(0.5rem + env(safe-area-inset-left, 0px));
-                        padding-right: calc(0.5rem + env(safe-area-inset-right, 0px));
+                        padding-left: calc(0.5rem + env(safe-area-inset-left, 0px) + var(--tb-left));
+                        padding-right: calc(0.5rem + env(safe-area-inset-right, 0px) + var(--tb-right));
                     }
                     /* One identity row instead of the brand: [⌂] [icon] NAME.
                        Closed (".titled" = there is a burger): only the NAME —
@@ -797,7 +1076,7 @@ class SacNav extends HTMLElement {
                         position: absolute;
                         top: env(safe-area-inset-top, 0px);
                         bottom: 0;
-                        right: calc(0.5rem + env(safe-area-inset-right, 0px));
+                        right: calc(0.5rem + env(safe-area-inset-right, 0px) + var(--tb-right));
                         translate: calc(100% + 1rem) 0;
                         opacity: 0;
                         visibility: hidden;
@@ -810,13 +1089,36 @@ class SacNav extends HTMLElement {
                     .menu-btn, .more-btn { width: 44px; height: 44px; }
                     .sub-list .nav-item,
                     .panel.rail-look .nav-item { min-height: 44px; }
+                    /* <sac-window>'s touch dots: 20px, 24px apart, halos meet. */
+                    .win-ctrls { gap: 24px; }
+                    .win-btn { width: 20px; height: 20px; }
+                    .win-btn::after { content: ''; position: absolute; inset: -12px; }
                 }
                 @media (hover: none) {
                     .menu-btn:hover, .more-btn:hover { background: none; }
+                    .win-btn:hover { transform: none; background: var(--btn-color); }
+                    .win-btn .glyph { opacity: 1; }
+                    /* …but the press itself still shows (a touch is a hover too). */
+                    .menu-btn:active, .more-btn:active { background: var(--hover-strong); }
+                    .win-btn:active { transform: scale(0.97); }
                 }
                 @media (prefers-reduced-motion: reduce) {
                     .menu-btn span, .backdrop, .panel, .more-btn, .right,
-                    .cid-home, .cid-icon { transition: none !important; }
+                    .cid-home, .cid-icon, .win-btn, .win-btn .glyph { transition: none !important; }
+                    .win-btn:hover { transform: none; }
+                }
+                /* Reduced transparency / more contrast: the blurred ribbon and
+                   panel turn solid (same hue), the edge a clearly visible line. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .ribbon,
+                    .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    .ribbon,
+                    .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                    .ribbon { border-bottom-color: var(--border-contrast); }
+                    .panel { border-right-color: var(--border-contrast); }
+                    .win-btn .glyph { opacity: 1; }
                 }
             </style>
             <nav class="ribbon${titled ? " titled" : ""}">
@@ -833,6 +1135,7 @@ class SacNav extends HTMLElement {
                 <a class="brand${brandIcon ? " has-icon" : ""}" href="${hrefFor(brandHref)}">
                     ${brandIcon ? `<span class="brand-mark"><sac-icon name="${brandIcon}"></sac-icon></span>` : ``}
                     ${brand ? `<span class="brand-text${hostHref ? " app-name" : ""}">${brand}</span>` : ``}
+                    ${appIcon ? `<span class="brand-mark app-mark"><sac-icon name="${esc(appIcon)}"></sac-icon></span>` : ``}
                     ${appName ? `<span class="app-name">${appName}</span>` : ``}
                 </a>
                 ${compactTitle ? `
@@ -840,7 +1143,7 @@ class SacNav extends HTMLElement {
                     ${hostHref ? `
                     <a class="cid-home" href="${esc(hostHref)}" title="${esc(hostLabel || L.home)}"${keyTitle}><sac-icon name="${esc(hostIcon)}"></sac-icon><span class="cid-home-label"${keyText("nav.home")}>${escText(hostLabel || str("nav.home"))}</span></a>` : ``}
                     <a class="compact-title${titleAccent ? " app-name" : ""}" href="${hrefFor(brandHref)}">
-                        ${brandIcon ? `<span class="cid-icon"><sac-icon name="${esc(brandIcon)}"></sac-icon></span>` : ``}
+                        ${cidIcon ? `<span class="cid-icon"><sac-icon name="${esc(cidIcon)}"></sac-icon></span>` : ``}
                         <span class="cid-text">${compactTitle}</span>
                     </a>
                 </div>` : ``}
@@ -858,9 +1161,18 @@ class SacNav extends HTMLElement {
                     </button>
                 </sac-menu>
                 </div>
+                ${own ? `
+                <!-- The window's own buttons (TITLE BAR, own) — they stay
+                     put while the controls slide out on compact. -->
+                <div class="win-ctrls">
+                    ${canMin ? `<button class="win-btn min-btn" type="button" data-win="min" title="${L.minimize}" aria-label="${L.minimize}" data-i18n-label="window.minimize" data-i18n-title="window.minimize">${GLYPH.min}</button>` : ``}
+                    ${canMax ? `<button class="win-btn max-btn" type="button" data-win="max">${GLYPH.max}</button>` : ``}
+                    <button class="win-btn close-btn" type="button" data-win="close" title="${L.close}" aria-label="${L.close}" data-i18n-label="window.close" data-i18n-title="window.close">${GLYPH.close}</button>
+                </div>` : ``}
             </nav>
             <div class="backdrop"></div>
-            <aside class="panel${compact ? " rail-look" : ""}">
+            <span class="ground-probe" hidden></span>
+            <aside class="panel${compact ? " rail-look" : ""}" tabindex="-1" aria-label="${L.menu}" data-i18n-label="nav.menu">
                 <!-- The app's own panel content (any use: filters, account,
                      settings…) — first, above the navigation groups. -->
                 <div class="panel-slot"><slot name="panel"></slot></div>
@@ -873,7 +1185,7 @@ class SacNav extends HTMLElement {
                              only in the ribbon ⌂ — the menu is the place you look
                              to navigate, so the suite's home belongs at the top of
                              its own group. Same data the ribbon jump already has. -->
-                        <a class="nav-item ${isActiveHref(panelHostHref) ? "active" : ""}" href="${esc(panelHostHref)}">
+                        <a class="nav-item ${isActiveHref(panelHostHref) ? "active" : ""}" href="${esc(panelHostHref)}"${cur(isActiveHref(panelHostHref))}>
                             <sac-icon name="${esc(hostIcon)}"></sac-icon>
                             <span data-i18n="nav.home">${escText(str("nav.home"))}</span>
                         </a>
@@ -882,9 +1194,10 @@ class SacNav extends HTMLElement {
                         // The entry addressing the running app carries the
                         // app's own sections as an indented subtree.
                         const self = isActiveHref(e.href);
+                        const inSection = self && sections.some(s => isActiveHref(s.href));
                         return `
                         <li>
-                            <a class="nav-item ${self ? "active" : ""}" href="${esc(hrefFor(e.href))}">
+                            <a class="nav-item ${self ? "active" : ""}" href="${esc(hrefFor(e.href))}"${cur(self, inSection ? "true" : "page")}>
                                 ${e.icon ? `<sac-icon name="${esc(e.icon)}"></sac-icon>` : ""}
                                 <span>${escText(e.label)}</span>
                             </a>
@@ -892,7 +1205,7 @@ class SacNav extends HTMLElement {
                             <ul class="sub-list">
                                 ${sections.map(s => `
                                     <li>
-                                        <a class="nav-item ${isActiveHref(s.href) ? "active" : ""}" href="${esc(hrefFor(s.href))}">
+                                        <a class="nav-item ${isActiveHref(s.href) ? "active" : ""}" href="${esc(hrefFor(s.href))}"${cur(isActiveHref(s.href))}>
                                             ${s.icon ? `<sac-icon name="${esc(s.icon)}"></sac-icon>` : ""}
                                             <span>${escText(s.label)}</span>
                                         </a>
@@ -909,7 +1222,7 @@ class SacNav extends HTMLElement {
                     : `<ul class="nav-list">
                          ${routes.map(r => `
                              <li>
-                                 <a class="nav-item ${isActive(r) ? "active" : ""}" href="${esc(hrefFor(r.hash))}">
+                                 <a class="nav-item ${!r.open && isActive(r) ? "active" : ""}" href="${esc(hrefFor(r.hash))}"${r.open ? ` data-open-route="${esc(r.hash)}"` : ""}${cur(!r.open && isActive(r))}>
                                      ${r.icon ? `<sac-icon name="${esc(r.icon)}"></sac-icon>` : ""}
                                      <span>${escText(r.label)}</span>
                                  </a>
@@ -920,7 +1233,7 @@ class SacNav extends HTMLElement {
                 <ul class="nav-list">
                     ${sections.map(s => `
                         <li>
-                            <a class="nav-item ${isActiveHref(s.href) ? "active" : ""}" href="${esc(hrefFor(s.href))}">
+                            <a class="nav-item ${isActiveHref(s.href) ? "active" : ""}" href="${esc(hrefFor(s.href))}"${cur(isActiveHref(s.href))}>
                                 ${s.icon ? `<sac-icon name="${esc(s.icon)}"></sac-icon>` : ""}
                                 <span>${escText(s.label)}</span>
                             </a>
@@ -932,6 +1245,11 @@ class SacNav extends HTMLElement {
 
         // Re-attach handlers on freshly-rendered shadow-root children.
         this.attachEphemeralHandlers();
+        if (refocus) {
+            const sr = this.shadowRoot;
+            const to = refocus === "panel" && this.isOpen ? sr.querySelector(".panel") : sr.querySelector(".menu-btn");
+            to?.focus({ preventScroll: true });
+        }
     }
 
     attachEphemeralHandlers() {
@@ -966,8 +1284,24 @@ class SacNav extends HTMLElement {
             }
         };
         const setOpen = (open) => {
+            const was = this.isOpen;
             this.isOpen = open;
             panel.classList.toggle("open", open);
+            // Panel mode (no rail drawer out): the menu is modal, as the
+            // drawer is — focus goes into it, the page behind turns inert,
+            // and on close focus comes back to the burger (when it was in
+            // the panel, or nowhere: a tap on the scrim drops it on <body>).
+            // Stacked over the drawer, _syncDrawer does all of this.
+            if (open !== was && !this._drawerOpen) {
+                if (open) {
+                    this._setInert(true);
+                    panel.focus({ preventScroll: true });
+                } else {
+                    const back = this._focusInPanelOrLost();
+                    this._setInert(false);
+                    if (back) menuBtn?.focus({ preventScroll: true });
+                }
+            }
             this._syncChrome();
         };
         this._setOpen = setOpen;
@@ -980,12 +1314,24 @@ class SacNav extends HTMLElement {
         });
         backdrop.addEventListener("click", () => this._closeAll());
 
+        // TITLE BAR, own: the window buttons.
+        this.shadowRoot.querySelectorAll(".win-btn").forEach((b) =>
+            b.addEventListener("click", () => this._windowAction(b.dataset.win)));
+        this._labelWinMax();
+        // TITLE BAR, overlay: the first render is the first ribbon to read.
+        if (this.getAttribute("titlebar") === "overlay") themeColor.paint();
+
         // The "…" toolbar overflow menu clicks the original control — or, for
         // an entry of a folded <sac-menu>, fires that menu's own sac:select.
         const more = this.shadowRoot.querySelector(".more");
         more.addEventListener("sac:select", (e) => {
             e.stopPropagation();
             const entry = this._moreEntries && this._moreEntries[Number(e.detail && e.detail.action)];
+            if (entry && entry.run) {        // a setOverflowGroup() entry
+                try { entry.run(e); }
+                catch (err) { console.error("[sac-nav] overflow entry threw:", err); }
+                return;
+            }
             if (!entry || !entry.el.isConnected) return;
             if (entry.action == null) { entry.el.click(); return; }
             entry.el.dispatchEvent(new CustomEvent("sac:select", {
@@ -1004,13 +1350,29 @@ class SacNav extends HTMLElement {
                 // semantics (a new tab with the window open), and an unknown id or
                 // a host with no sac.apps simply falls back to that too. Mirrors
                 // the launcher tile's [data-app] contract.
+                // A route registered with `open` (a window app in the list):
+                // run it instead of following the hash, which is only its key.
+                if (el.dataset.openRoute) {
+                    e.preventDefault();
+                    // Close first: while the menu is out the page is inert,
+                    // and a window open() focuses must not be inside it.
+                    this._closeAll();
+                    const route = (window.sac?.router?.routes() || []).find(r => r.hash === el.dataset.openRoute);
+                    if (route && route.open) {
+                        try { route.open(route); }
+                        catch (err) { console.error("[sac-nav] a route's open() threw:", err); }
+                    }
+                    return;
+                }
                 const m = /[?&]app=([^&]+)/.exec(el.getAttribute("href") || "");
                 const id = m && decodeURIComponent(m[1]);
                 if (id && !e.defaultPrevented && e.button === 0 &&
                     !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey &&
                     window.sac?.apps?.get?.(id)) {
                     e.preventDefault();
+                    this._closeAll();     // first: the window must not open into an inert page
                     Promise.resolve(sac.apps.open(id)).catch(() => {});
+                    return;
                 }
                 this._closeAll();
             });
@@ -1023,6 +1385,77 @@ class SacNav extends HTMLElement {
         if (this._drawerOpen) this._layoutDrawer();
         this._syncChrome();
         this._scheduleOverflow();
+    }
+
+    /* ------------------------------------------------ the window's title bar */
+
+    static OVERLAY    = "(display-mode: window-controls-overlay)";
+    static BORDERLESS = "(display-mode: borderless)";
+    static MAXIMIZED  = "(display-state: maximized)";
+
+    /** Which title bar the nav is (see TITLE BAR): "overlay", "own" or "". */
+    _titlebarMode() {
+        // A nav in a frame is not at the window's edge.
+        if (window.top !== window) return "";
+        if (window.matchMedia(SacNav.BORDERLESS).matches) return "own";
+        if (window.matchMedia(SacNav.OVERLAY).matches) return "overlay";
+        return "";
+    }
+
+    /** [titlebar] and what hangs on it: the own buttons, the theme-color. */
+    _syncTitlebar() {
+        const mode = this._titlebarMode();
+        if (mode !== (this.getAttribute("titlebar") || "")) {
+            if (mode) this.setAttribute("titlebar", mode);
+            else this.removeAttribute("titlebar");
+            if (this.shadowRoot.firstChild) this.render();
+        }
+        this._labelWinMax();
+        themeColor.sync(this, mode === "overlay");
+    }
+
+    /** The maximise dot names what it does now — maximise, or restore. */
+    _labelWinMax() {
+        const btn = this.shadowRoot.querySelector('.win-btn[data-win="max"]');
+        if (!btn) return;
+        const maximized = window.matchMedia(SacNav.MAXIMIZED).matches;
+        const label = str(maximized ? "window.restore" : "window.maximize");
+        btn.setAttribute("aria-label", label);
+        btn.setAttribute("title", label);
+        btn.classList.toggle("restore", maximized);     // its glyph follows
+    }
+
+    /** An own window button. The browser may still refuse (no
+     *  window-management permission; a window a script may not close). */
+    _windowAction(what) {
+        const refused = (err) => console.warn(`[sac-nav] the browser refused "${what}":`, err);
+        try {
+            const done = what === "min" ? window.minimize()
+                : what === "max" ? (window.matchMedia(SacNav.MAXIMIZED).matches ? window.restore() : window.maximize())
+                : window.close();
+            if (done && typeof done.catch === "function") done.catch(refused);
+        } catch (err) { refused(err); }
+    }
+
+    /** The ribbon as ONE opaque colour (for theme-color): its glass laid
+     *  over the theme's ground, composited on a 1px canvas. */
+    _ribbonColor() {
+        const ribbon = this.shadowRoot.querySelector(".ribbon");
+        const probe = this.shadowRoot.querySelector(".ground-probe");
+        if (!ribbon || !probe) return "";
+        if (!SacNav._px) {
+            const c = document.createElement("canvas");
+            c.width = c.height = 1;
+            SacNav._px = c.getContext("2d", { willReadFrequently: true });
+        }
+        const g = SacNav._px;
+        g.clearRect(0, 0, 1, 1);
+        g.fillStyle = getComputedStyle(probe).backgroundColor;
+        g.fillRect(0, 0, 1, 1);
+        g.fillStyle = getComputedStyle(ribbon).backgroundColor;
+        g.fillRect(0, 0, 1, 1);
+        const [r, gr, b] = g.getImageData(0, 0, 1, 1).data;
+        return "#" + [r, gr, b].map((v) => v.toString(16).padStart(2, "0")).join("");
     }
 
     /* ------------------------------------------------ compact: rail drawer */
@@ -1072,8 +1505,10 @@ class SacNav extends HTMLElement {
             if (e.target.closest?.("a[href], [data-drawer-close]")) this._setDrawer(false);
         };
         rail.addEventListener("click", this._railClick);
-        rail.addEventListener("touchstart", this._swipeStart, { passive: true });
-        rail.addEventListener("touchend", this._swipeEnd, { passive: true });
+        rail.addEventListener("pointerdown", this._swipeStart);
+        rail.addEventListener("pointermove", this._swipeMove);
+        rail.addEventListener("pointerup", this._swipeEnd);
+        rail.addEventListener("pointercancel", this._swipeEnd);
     }
 
     _releaseRail() {
@@ -1081,8 +1516,10 @@ class SacNav extends HTMLElement {
         if (!rail) return;
         this._railMO?.disconnect();
         rail.removeEventListener("click", this._railClick);
-        rail.removeEventListener("touchstart", this._swipeStart);
-        rail.removeEventListener("touchend", this._swipeEnd);
+        rail.removeEventListener("pointerdown", this._swipeStart);
+        rail.removeEventListener("pointermove", this._swipeMove);
+        rail.removeEventListener("pointerup", this._swipeEnd);
+        rail.removeEventListener("pointercancel", this._swipeEnd);
         rail.removeAttribute("drawer");
         rail.removeAttribute("open");
         rail.style.removeProperty("--drawer-top");
@@ -1112,7 +1549,10 @@ class SacNav extends HTMLElement {
             }
         } else {
             if (rail) rail.removeAttribute("open");
-            const inside = rail && (rail === document.activeElement || rail.contains(document.activeElement));
+            // In the rail, in the stacked panel, or nowhere (a tap on the
+            // scrim drops focus on <body>): it goes back to the burger.
+            const inside = (rail && (rail === document.activeElement || rail.contains(document.activeElement)))
+                || this._focusInPanelOrLost();
             if (this.isOpen) this._setOpen?.(false);
             this.shadowRoot.querySelector(".panel")?.classList.remove("with-rail");
             this._setInert(false);
@@ -1147,20 +1587,45 @@ class SacNav extends HTMLElement {
         }
     }
 
-    /** Focus trap: everything outside the nav and the drawer turns inert. */
+    /** Focus trap: everything outside the nav (and the rail drawer, when it
+     *  is out) turns inert while the menu is out — panel or drawer. What was
+     *  inert already is left alone, and only what this set is given back.
+     *  Layers above the open menu (dialogs, tooltips, toasts: z-index over
+     *  19000) stay live: a dialog opened from the panel must answer. */
     _setInert(on) {
         this._inerted.forEach((el) => { el.inert = false; });
         this._inerted = [];
-        if (!on || !this._rail) return;
-        const keep = [this, this._rail];
-        for (let node = this._rail; node.parentElement && node !== document.body; node = node.parentElement) {
-            for (const sib of node.parentElement.children) {
-                if (sib === node || sib.inert || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(sib.tagName)) continue;
-                if (keep.some((k) => sib === k || sib.contains(k))) continue;
-                sib.inert = true;
-                this._inerted.push(sib);
+        if (!on) return;
+        const keep = [this];
+        if (this._drawerOpen && this._rail) keep.push(this._rail);
+        for (const start of keep) {
+            for (let node = start; node.parentElement && node !== document.body; node = node.parentElement) {
+                for (const sib of node.parentElement.children) {
+                    if (sib === node || sib.inert || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(sib.tagName)) continue;
+                    if (keep.some((k) => sib === k || sib.contains(k))) continue;
+                    if ((parseInt(getComputedStyle(sib).zIndex, 10) || 0) > 19000) continue;
+                    sib.inert = true;
+                    this._inerted.push(sib);
+                }
             }
         }
+    }
+
+    /** Focus is in the panel (or the app's slotted panel content), or
+     *  nowhere: closing must hand it back to the burger. Focus the user has
+     *  put elsewhere (a ribbon control) stays where it is. */
+    _focusInPanelOrLost() {
+        const a = this.getRootNode().activeElement;
+        if (!a) {
+            const d = document.activeElement;
+            return !d || d === document.body || d === document.documentElement;
+        }
+        if (a === document.body || a === document.documentElement) return true;
+        if (a === this) {
+            const s = this.shadowRoot.activeElement;
+            return !s || !!s.closest(".panel");
+        }
+        return this.contains(a) && !!a.closest('[slot="panel"]');
     }
 
     /** What the burger does: on compact with a rail, the drawer (stacked
@@ -1181,29 +1646,135 @@ class SacNav extends HTMLElement {
         this._setDrawer(false);
     }
 
-    /* Swipe left to close the drawer — never from a control that drags. */
+    /* Swipe left to close — a finger or a pen, never from a control that
+       drags, never from the scrim (a tap there closes anyway). After 10px
+       that are clearly sideways the panel, the rail drawer and the scrim
+       follow the finger 1:1 (resisting rightwards); let go and a spring
+       closes it — when it was pushed past half its width or flicked shut —
+       or puts it back. Caught again mid-flight, it carries on from there. */
     _swipeStart = (e) => {
-        this._swipe = null;
-        if (!(this.isOpen || this._drawerOpen) || e.touches.length !== 1) return;
-        const drags = e.composedPath().some((n) => n.matches?.(
-            'input, textarea, select, sac-slider, [role="slider"], [role="separator"], [data-no-swipe]'));
+        if (e.pointerType === "mouse" || this._swipe) return;
+        if (!(this.isOpen || this._drawerOpen)) return;
+        const path = e.composedPath();
+        if (path.some((n) => n.classList?.contains("backdrop") && n.getRootNode() === this.shadowRoot)) return;
+        // Never from a control that drags, nor from a surface that takes the
+        // finger itself (touch-action: none — a canvas, a pan-zoom viewport).
+        const drags = path.some((n) => n.nodeType === 1 && (n.matches(
+            'input, textarea, select, [contenteditable]:not([contenteditable="false"]), ' +
+            'sac-slider, [role="slider"], [role="separator"], [data-no-swipe]')
+            || getComputedStyle(n).touchAction === "none"));
         if (drags) return;
-        this._swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        const caught = this._swipeSpring;
+        if (caught) { caught.stop(); this._swipeSpring = null; }
+        const m = motion();
+        this._swipe = {
+            id: e.pointerId, x0: e.clientX, y0: e.clientY,
+            // Caught mid-flight: already sideways, carrying on from its offset.
+            decided: !!caught, dx: caught ? this._swipeDx : 0, base: caught ? this._swipeDx : 0,
+            track: m ? m.tracker() : null,
+        };
+    };
+    _swipeMove = (e) => {
+        const s = this._swipe;
+        if (!s || e.pointerId !== s.id) return;
+        const dx = e.clientX - s.x0, dy = e.clientY - s.y0;
+        if (!s.decided) {
+            if (Math.hypot(dx, dy) < 10) return;
+            if (Math.abs(dx) <= Math.abs(dy) * 1.2) { this._swipe = null; return; }   // a scroll
+            s.decided = true;
+            s.x0 = e.clientX;            // from here on 1:1 — no jump by the slop
+            if (motion()) this._holdDrawer(true);
+        }
+        const m = motion();
+        if (!m) { s.dx = e.clientX - s.x0; return; }
+        const raw = s.base + e.clientX - s.x0;
+        s.dx = raw > 0 ? m.rubberband(raw, this._drawerWidth()) : raw;
+        this._placeDrawer(s.dx);
+        s.track.add(s.dx, e.timeStamp);
     };
     _swipeEnd = (e) => {
         const s = this._swipe;
+        if (!s || e.pointerId !== s.id) return;
         this._swipe = null;
-        if (!s || !e.changedTouches.length) return;
-        const dx = e.changedTouches[0].clientX - s.x;
-        const dy = e.changedTouches[0].clientY - s.y;
-        if (dx < -60 && Math.abs(dx) > Math.abs(dy) * 1.5) this._closeAll();
+        if (!s.decided) return;
+        const m = motion();
+        if (!m) { if (s.dx < -60) this._closeAll(); return; }
+        const w = this._drawerWidth();
+        const v = e.type === "pointerup" ? s.track.velocity(e.timeStamp) : 0;
+        const close = s.dx + m.project(v) < -w / 2;
+        const spring = this._swipeSpring = m.spring({
+            from: s.dx, to: close ? -1.1 * w : 0, velocity: v,
+            damping: !close && Math.abs(v) > 400 ? 0.8 : 1,
+            response: 0.3,
+            onUpdate: (x) => this._placeDrawer(x),
+            onDone: () => {
+                if (this._swipeSpring !== spring) return;
+                this._swipeSpring = null;
+                if (close) this._closeAll();
+                this._holdDrawer(false);
+            },
+        });
     };
+
+    /** The width that is out: the panel's, the rail drawer's, the wider. */
+    _drawerWidth() {
+        const panel = this.shadowRoot.querySelector(".panel");
+        return Math.max(this.isOpen && panel ? panel.offsetWidth : 0,
+            this._drawerOpen && this._rail ? this._rail.offsetWidth : 0) || 300;
+    }
+
+    /** Take the panel, the rail and the scrim off their CSS transitions for
+     *  a finger to move them (true), or hand them back to the stylesheet. */
+    _holdDrawer(hold) {
+        const els = [this.shadowRoot.querySelector(".panel"), this._rail,
+            this.shadowRoot.querySelector(".backdrop")].filter(Boolean);
+        for (const el of els) {
+            el.style.transition = hold ? "none" : "";
+            if (!hold) { el.style.transform = ""; el.style.translate = ""; el.style.opacity = ""; }
+        }
+        if (!hold) this._swipeDx = 0;
+    }
+
+    /** Everything that is out, dx px off its open place; the scrim fades
+     *  with the distance. */
+    _placeDrawer(dx) {
+        this._swipeDx = dx;
+        const panel = this.shadowRoot.querySelector(".panel");
+        if (this.isOpen && panel) panel.style.transform = `translateX(${dx}px)`;
+        if (this._drawerOpen && this._rail) this._rail.style.translate = `${dx}px 0`;
+        const backdrop = this.shadowRoot.querySelector(".backdrop");
+        if (backdrop) backdrop.style.opacity = String(Math.min(1, Math.max(0, 1 + dx / this._drawerWidth())));
+    }
 
     /* ------------------------------------------------- toolbar overflow */
 
     _scheduleOverflow() {
         cancelAnimationFrame(this._overflowFrame);
-        this._overflowFrame = requestAnimationFrame(() => this._layoutOverflow());
+        this._overflowFrame = requestAnimationFrame(() => { this._snapBurger(); this._layoutOverflow(); });
+    }
+
+    /** The burger's three lines on the device grid: thickness and gap
+     *  rounded to whole device pixels, so every line sits the same fraction
+     *  off a pixel row and the browser's paint snapping treats all three
+     *  alike. Runs with every layout pass — a render, a resize, a browser
+     *  zoom — and on a resolution change (a window moved to a screen with
+     *  another scale). */
+    _snapBurger() {
+        const btn = this.shadowRoot.querySelector(".menu-btn");
+        const dpr = window.devicePixelRatio || 1;
+        if (this._dprMq?.dpr !== dpr) {
+            this._dprMq?.removeEventListener("change", this._dprHandler);
+            this._dprHandler = this._dprHandler || (() => this._scheduleOverflow());
+            this._dprMq = window.matchMedia(`(resolution: ${dpr}dppx)`);
+            this._dprMq.dpr = dpr;
+            this._dprMq.addEventListener("change", this._dprHandler);
+        }
+        if (!btn) return;
+        const dev = (css) => Math.max(1, Math.round(css * dpr)) / dpr;
+        const h = dev(2), gap = dev(4);
+        btn.style.setProperty("--bar-h", `${h}px`);
+        btn.style.setProperty("--bar-gap", `${gap}px`);
+        btn.style.setProperty("--bar-pitch", `${h + gap}px`);
     }
 
     /** Toolbar controls that may move into the "…" menu, in ribbon order. */
@@ -1242,13 +1813,34 @@ class SacNav extends HTMLElement {
             if (!this._roWatched) this._roWatched = new WeakSet();
             if (this._ro && !this._roWatched.has(el)) { this._ro.observe(el); this._roWatched.add(el); }
         }
-        more.hidden = true;
+        // Contributed groups (setOverflowGroup) keep the "…" out on their own;
+        // an owner element that left the DOM without withdrawing is dropped.
+        this._groups.forEach((_, owner) => {
+            if (owner instanceof Node && !owner.isConnected) this._groups.delete(owner);
+        });
+        const groups = customElements.get("sac-menu") ? [...this._groups.values()] : [];
+        more.hidden = !groups.length;
 
         const brand = sr.querySelector(".brand:not(.host-jump)");
         const context = sr.querySelector(".context");
         // Measured on the ribbon's own children, not ribbon.scrollWidth: a
         // descendant's closed popover may still take layout and would count
         // as overflow.
+        // Truncated = the text is really wider than its box. scrollWidth and
+        // clientWidth are rounded integers, so a 1px difference is measured
+        // exactly (text range vs. content box) instead of being tolerated —
+        // a tolerated pixel still renders the ellipsis.
+        const truncated = (el) => {
+            if (!el || el.scrollWidth <= el.clientWidth) return false;
+            if (el.scrollWidth > el.clientWidth + 1) return true;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const cs = getComputedStyle(el);
+            const inner = el.getBoundingClientRect().width
+                - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+                - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+            return range.getBoundingClientRect().width > inner + 0.25;
+        };
         const fits = () => {
             const box = ribbon.getBoundingClientRect();
             const limit = box.right - parseFloat(getComputedStyle(ribbon).paddingRight) + 1;
@@ -1258,7 +1850,7 @@ class SacNav extends HTMLElement {
             // measure them, not only the link around them.
             ![brand, ...(brand ? brand.querySelectorAll("span") : []),
               ...sr.querySelectorAll(".compact-title, .cid-text")]
-                .some((el) => el && el.scrollWidth > el.clientWidth + 1) &&
+                .some(truncated) &&
                 (!context || context.scrollWidth <= context.clientWidth + 1);
         };
 
@@ -1270,7 +1862,7 @@ class SacNav extends HTMLElement {
                 visible[i].setAttribute("data-sac-overflow", "");
                 over.unshift(visible[i]);
             }
-            if (!over.length) more.hidden = true;
+            if (!over.length && !groups.length) more.hidden = true;
         }
         this._overflowed = over;
 
@@ -1301,7 +1893,7 @@ class SacNav extends HTMLElement {
         over.forEach((el) => {
             if (el.localName === "sac-menu") {
                 const items = [...el.children].filter((c) =>
-                    c.matches("button[data-action]") && c.getAttribute("slot") !== "trigger");
+                    c.matches("button[data-action]:not([hidden])") && c.getAttribute("slot") !== "trigger");
                 if (!items.length) return;
                 if (more.querySelector("[data-action]")) more.appendChild(document.createElement("hr"));
                 items.forEach((item) => {
@@ -1315,6 +1907,25 @@ class SacNav extends HTMLElement {
             addButton(el, el.textContent.trim() || el.getAttribute("aria-label") || el.title || "",
                 el.disabled || el.getAttribute("aria-disabled") === "true");
         });
+        // Contributed groups: each behind a separator, after the folded controls.
+        groups.forEach((group) => {
+            if (more.querySelector("[data-action]")) more.appendChild(document.createElement("hr"));
+            group.forEach((g) => {
+                entries.push({ run: g.run });
+                const b = document.createElement("button");
+                b.type = "button";
+                b.dataset.action = String(entries.length - 1);
+                if (g.disabled) b.disabled = true;
+                if (g.danger) b.setAttribute("data-danger", "");
+                if (g.icon) {
+                    const ic = document.createElement("sac-icon");
+                    ic.setAttribute("name", g.icon);
+                    b.appendChild(ic);
+                }
+                b.appendChild(document.createTextNode(g.label == null ? "" : String(g.label)));
+                more.appendChild(b);
+            });
+        });
         this._moreEntries = entries;
     }
 
@@ -1324,8 +1935,10 @@ class SacNav extends HTMLElement {
         };
         document.addEventListener("keydown", this._escHandler);
         // Swipe-left closes the panel too (the rail carries its own listeners).
-        this.addEventListener("touchstart", this._swipeStart, { passive: true });
-        this.addEventListener("touchend", this._swipeEnd, { passive: true });
+        this.addEventListener("pointerdown", this._swipeStart);
+        this.addEventListener("pointermove", this._swipeMove);
+        this.addEventListener("pointerup", this._swipeEnd);
+        this.addEventListener("pointercancel", this._swipeEnd);
 
         // These three handlers re-render the whole panel, deliberately: unlike
         // the form components (which update in place to protect a live drag),
@@ -1342,10 +1955,11 @@ class SacNav extends HTMLElement {
         this._hashHandler = () => { this._closeAll(); this.isOpen = false; this.render(); };
         window.addEventListener("hashchange", this._hashHandler);
 
-        // Re-render when a new route registers so the panel fills in even if
-        // view scripts run after the nav's first render.
+        // Re-render when a route registers (or goes) so the panel follows
+        // even when view scripts run after the nav's first render.
         this._routeHandler = () => this.render();
         window.addEventListener("sac:route-registered", this._routeHandler);
+        window.addEventListener("sac:route-unregistered", this._routeHandler);
 
         // Scope switch: hrefs pick up the new prefix, active-state moves.
         this._scopeHandler = () => this.render();

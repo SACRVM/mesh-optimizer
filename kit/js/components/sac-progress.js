@@ -16,6 +16,11 @@
  *   label          — optional heading text. When set, a header row appears
  *                     above the track: label left, percentage right. With
  *                     no label attribute the row is omitted entirely.
+ *                     It is also the progressbar's accessible name (2.36:
+ *                     aria-label on the host, kept in step) — unless the
+ *                     app named it itself with its own aria-label or
+ *                     aria-labelledby, which win. Without a label, name it
+ *                     that way: a progressbar wants a name.
  *   indeterminate  — presence switches to the endless-slide animation;
  *                     value/max stop driving the bar width, percentage
  *                     is hidden.
@@ -25,7 +30,7 @@
  *
  * Host reflects ARIA progressbar semantics: role="progressbar",
  * aria-valuemin/aria-valuemax always set, aria-valuenow tracks value and
- * is removed while indeterminate.
+ * is removed while indeterminate, aria-label from `label` (see above).
  */
 class SacProgress extends HTMLElement {
     static get observedAttributes() { return ["value", "max", "label", "indeterminate"]; }
@@ -63,6 +68,19 @@ class SacProgress extends HTMLElement {
         if (label) label.textContent = this.getAttribute("label") || "";
         if (pct) pct.textContent = `${Math.round(ratio)}%`;
         if (!this.hasAttribute("indeterminate")) bar.style.width = `${ratio}%`;
+
+        // `label` names the progressbar — the visible text lives in the
+        // shadow root, where no aria-labelledby on the host can reach it,
+        // so the host carries it as aria-label. An aria-label or
+        // aria-labelledby the app set itself is left alone.
+        const name = this.getAttribute("label") || "";
+        const own = this.hasAttribute("aria-labelledby") ||
+            (this.hasAttribute("aria-label") && this.getAttribute("aria-label") !== this._autoName);
+        if (!own) {
+            if (name) this.setAttribute("aria-label", name);
+            else this.removeAttribute("aria-label");
+            this._autoName = name || null;
+        }
 
         this.setAttribute("aria-valuemin", "0");
         this.setAttribute("aria-valuemax", String(max));

@@ -2,16 +2,33 @@
  * <sac-log>
  *
  * Structured timestamped log entries.
- * Colors: info→--ok, warn→--accent-warm, error→--danger.
+ * Colors: info→--ok, warn→--accent-warm, error→--danger. The level is never
+ * colour alone: every entry leads with its level icon (info a circled i,
+ * warn a triangle, error a circled × — three shapes) and carries the level
+ * as words for screen readers ("Warning: …").
  *
  * Methods:
  *   add(text, level)   — level: "info" | "warn" | "error"
- *   clear()
- *   copy()             — copies all entries to clipboard
+ *   clear()            — empties the log for good, silently (app code).
+ *   copy()             — copies all entries to clipboard; resolves true /
+ *                        false. A failure is reported, never swallowed:
+ *                        sac.toast (kind "error") "Couldn't copy – select the
+ *                        text and press Ctrl+C" (the platform's keys), or a
+ *                        console warning without the toast module.
  *
  * add() APPENDS one node — it never rebuilds the list, so only the new entry
  * plays the slide-in and existing rows don't flicker. Entry text is written
  * with textContent; log strings routinely come from errors and user input.
+ * It scrolls the new entry into view only when the body was already at (or
+ * within ~24px of) the bottom — someone reading further up is not yanked
+ * away.
+ *
+ * The header's Clear button is forgiving: the entries go, and a toast offers
+ * Undo ("Log cleared · Undo"), which puts them back in front of anything
+ * logged since. Without sac.toast the button clears for good, like clear().
+ *
+ * ARIA: the body is role="log" (polite, named by the header), so each new
+ * entry is read as it arrives.
  *
  * Compact/touch: entry text is always selectable (user-select: text — the
  * kit's app shells switch selection off, and copying a log line off a phone
@@ -31,6 +48,18 @@
      *  browser's default locale. */
     const stamp = (date) => date.toLocaleTimeString(
         (window.sac && window.sac.lang) ? window.sac.lang.locale() : undefined);
+    /** Level → icon name (sac.icons) and the words a screen reader hears. */
+    const LEVELS = {
+        info:  { icon: "info",  key: "log.level-info",  fallback: "Info" },
+        warn:  { icon: "warn",  key: "log.level-warn",  fallback: "Warning" },
+        error: { icon: "error", key: "log.level-error", fallback: "Error" },
+    };
+    const levelOf = (level) => LEVELS[level] || LEVELS.info;
+    /** The "copy failed" advice, with the platform's own copy keys. */
+    const copyFailed = () => {
+        const keys = (window.sac && sac.hotkeys && sac.hotkeys.format) ? sac.hotkeys.format("mod+c") : "Ctrl+C";
+        return t("log.copy-failed", "Couldn't copy – select the text and press {keys}").replace("{keys}", () => keys);
+    };
 
 class SacLog extends HTMLElement {
     constructor() {
@@ -54,8 +83,10 @@ class SacLog extends HTMLElement {
         this.entries.push(entry);
         const body = this.shadowRoot.getElementById("body");
         if (body) {
+            // Follow the tail only when the reader is already there.
+            const atEnd = body.scrollHeight - body.scrollTop - body.clientHeight <= 24;
             body.appendChild(this._entryNode(entry));
-            body.scrollTop = body.scrollHeight;
+            if (atEnd) body.scrollTop = body.scrollHeight;
         }
     }
 
@@ -65,13 +96,36 @@ class SacLog extends HTMLElement {
         if (body) body.replaceChildren();
     }
 
+    /** The Clear button: clear, then offer Undo through a toast. Undo puts
+     *  the cleared entries back in front of whatever was logged since. */
+    _clearWithUndo() {
+        const saved = this.entries.slice();
+        this.clear();
+        if (!saved.length || !(window.sac && typeof sac.toast === "function")) return;
+        sac.toast(t("log.cleared", "Log cleared"), {
+            action: {
+                label: t("log.undo", "Undo"),
+                labelKey: "log.undo",
+                onClick: () => {
+                    this.entries = saved.concat(this.entries);
+                    this.renderBody(true);
+                },
+            },
+        });
+    }
+
     async copy() {
-        const text = this.entries.map(e => `[${e.ts}] ${e.level.toUpperCase()}: ${e.text}`).join("\n");
+        const text = this.entries.map(e => `[${e.ts}] ${String(e.level).toUpperCase()}: ${e.text}`).join("\n");
         try {
+            if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard API unavailable");
             await navigator.clipboard.writeText(text);
             this.flashCopied();
-        } catch {
-            // ignore
+            return true;
+        } catch (err) {
+            // Never swallowed: say so, and what to do instead.
+            console.warn("sac-log: copy failed", err);
+            if (window.sac && typeof sac.toast === "function") sac.toast(copyFailed(), { kind: "error" });
+            return false;
         }
     }
 
@@ -101,6 +155,11 @@ class SacLog extends HTMLElement {
             if (!e.date) return;
             e.ts = stamp(e.date);
             if (spans[i]) spans[i].textContent = e.ts;
+        });
+        const words = root.querySelectorAll("#body .entry .lv-text");
+        this.entries.forEach((e, i) => {
+            const lv = levelOf(e.level);
+            if (words[i]) words[i].textContent = `${t(lv.key, lv.fallback)}: `;
         });
     }
 
@@ -147,6 +206,8 @@ class SacLog extends HTMLElement {
                     font-family: inherit;
                 }
                 .hdr button:hover { color: var(--text); background: var(--hover); }
+                /* Press: answers the moment it goes down. */
+                .hdr button:active { background: var(--hover-strong); transition-duration: 0s; }
                 .body {
                     flex: 1;
                     overflow-y: auto;
@@ -167,6 +228,8 @@ class SacLog extends HTMLElement {
                 }
                 @media (hover: none) {
                     .hdr button:hover { color: color-mix(in srgb, var(--fg) 78%, var(--bg)); background: none; }
+                    /* …but the press itself still shows (a touch is a hover too). */
+                    .hdr button:active { background: var(--hover-strong); }
                 }
                 .entry {
                     padding: 0.2rem 0;
@@ -183,27 +246,49 @@ class SacLog extends HTMLElement {
                 .entry.info  { color: var(--ok-text); }
                 .entry.warn  { color: var(--accent-warm-text); }
                 .entry.error { color: var(--danger-text); }
+                /* The level's shape: info, warn and error differ without
+                   their colour. Inline, so a wrapped entry keeps its flow. */
+                .entry .lv {
+                    --icon-size: 12px;
+                    margin-right: 0.35rem;
+                    vertical-align: -1px;
+                }
+                /* The level as words, for screen readers only. */
+                .lv-text {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    margin: -1px;
+                    padding: 0;
+                    overflow: hidden;
+                    clip: rect(0 0 0 0);
+                    white-space: nowrap;
+                    border: 0;
+                }
+                .body { position: relative; }
 
                 /* Scrollbar theme — duplicated because the global rule in
                    ui.css doesn't pierce Shadow DOM. */
-                .body::-webkit-scrollbar { width: 6px; }
+                .body::-webkit-scrollbar { width: var(--scrollbar-size); }
                 .body::-webkit-scrollbar-track { background: transparent; }
                 .body::-webkit-scrollbar-thumb {
                     background: var(--scrollbar-thumb);
+                    background-clip: content-box;
+                    border: var(--scrollbar-gap) solid transparent;
                     border-radius: 999px;
                 }
             </style>
             <div class="hdr">
-                <span>${L.header}</span>
+                <span id="hdr-title">${L.header}</span>
                 <div>
                     <button id="copy-btn">${L.copy}</button>
                     <button id="clear-btn">${L.clear}</button>
                 </div>
             </div>
-            <div class="body" id="body"></div>
+            <div class="body" id="body" role="log" aria-labelledby="hdr-title"></div>
         `;
         this.shadowRoot.getElementById("copy-btn").addEventListener("click", () => this.copy());
-        this.shadowRoot.getElementById("clear-btn").addEventListener("click", () => this.clear());
+        this.shadowRoot.getElementById("clear-btn").addEventListener("click", () => this._clearWithUndo());
         this.renderBody();
     }
 
@@ -213,17 +298,34 @@ class SacLog extends HTMLElement {
         const tsEl = document.createElement("span");
         tsEl.className = "ts";
         tsEl.textContent = ts;
+        const lv = levelOf(level);
+        const icon = document.createElement("sac-icon");
+        icon.className = "lv";
+        icon.setAttribute("name", lv.icon);
+        icon.setAttribute("aria-hidden", "true");
+        const words = document.createElement("span");
+        words.className = "lv-text";
+        words.textContent = `${t(lv.key, lv.fallback)}: `;
         const msg = document.createElement("span");
         msg.textContent = String(text);
-        div.append(tsEl, msg);
+        div.append(tsEl, icon, words, msg);
         return div;
     }
 
-    /** Full repaint — initial render only; add() appends instead. */
-    renderBody() {
+    /** Full repaint — initial render and Undo; add() appends instead.
+     *  `still`: no slide-in (a restore is not news). */
+    renderBody(still) {
         const body = this.shadowRoot.getElementById("body");
         if (!body) return;
-        body.replaceChildren(...this.entries.map(e => this._entryNode(e)));
+        const nodes = this.entries.map(e => this._entryNode(e));
+        if (still) {
+            nodes.forEach((n) => { n.style.animation = "none"; });
+            // Restored entries are not new: the log stays quiet for the
+            // swap instead of reading every line again.
+            body.setAttribute("aria-live", "off");
+            requestAnimationFrame(() => body.removeAttribute("aria-live"));
+        }
+        body.replaceChildren(...nodes);
         body.scrollTop = body.scrollHeight;
     }
 }

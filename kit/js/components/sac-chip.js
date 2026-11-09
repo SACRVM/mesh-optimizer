@@ -11,10 +11,21 @@
  * Attributes:
  *   label      — display text.
  *   color      — palette slot. Defaults to "gray" if unknown.
- *   removable  — shows an × button. Click emits 'sac:remove'.
- *   selected   — filter-strip "active" state; brighter ring + saturated bg.
- *   clickable  — pointer cursor + hover affordance (filter-strip mode).
- *   disabled   — inert + dimmed; the × emits nothing.
+ *   removable  — shows an × button. Click emits 'sac:remove'. Its
+ *                accessible name carries the chip: "Remove {label}".
+ *   selected   — filter-strip "active" state; brighter ring + saturated bg
+ *                and a small check before the label (a cue that is not
+ *                colour alone).
+ *   clickable  — pointer cursor + hover affordance (filter-strip mode). The
+ *                host becomes a toggle button for keyboards and screen
+ *                readers: role="button", tabindex="0" (none while
+ *                disabled), aria-pressed mirroring `selected`, Enter / Space
+ *                click it (the app's click listener runs, as for a pointer),
+ *                and a :focus-visible ring. The chip still never toggles
+ *                `selected` itself — the app does, as before. Any role /
+ *                tabindex the author wrote is left alone.
+ *   disabled   — inert + dimmed; the × emits nothing; aria-disabled on a
+ *                clickable chip.
  *
  * Properties:
  *   disabled   — get/set, reflects the attribute.
@@ -53,19 +64,62 @@ class SacChip extends HTMLElement {
         else this._refresh();
         // Runtime language switch: relabel the × in place.
         if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+        if (!this._onKey) {
+            // A clickable chip is a button: Enter clicks on press, Space on
+            // release (the native button's timing). Keys that start inside
+            // the shadow root (the ×, a native button) are theirs.
+            this._onKey = (e) => {
+                if (!this.hasAttribute("clickable") || this.disabled) return;
+                if (e.composedPath()[0] !== this) return;
+                if (e.type === "keydown") {
+                    if (e.key === "Enter" && !e.repeat) { e.preventDefault(); this.click(); }
+                    else if (e.key === " " || e.key === "Spacebar") e.preventDefault();   // no page scroll
+                } else if (e.key === " " || e.key === "Spacebar") {
+                    e.preventDefault();
+                    this.click();
+                }
+            };
+            this.addEventListener("keydown", this._onKey);
+            this.addEventListener("keyup", this._onKey);
+        }
     }
 
     disconnectedCallback() {
         if (this._offLang) { this._offLang(); this._offLang = null; }
     }
 
-    /** The remove button's tooltip + aria-label in the current language. */
+    /** The remove button's tooltip + aria-label in the current language:
+     *  the tooltip says the action, the name says which chip ("Remove work"). */
     _relabel() {
         const x = this.shadowRoot.querySelector(".x");
         if (!x) return;
-        const text = t("chip.remove", "Remove");
-        x.title = text;
-        x.setAttribute("aria-label", text);
+        const label = this.getAttribute("label") || "";
+        x.title = t("chip.remove", "Remove");
+        x.setAttribute("aria-label", label
+            ? t("chip.remove-named", "Remove {name}").replace("{name}", () => label)
+            : t("chip.remove", "Remove"));
+    }
+
+    /** Button semantics on the host while [clickable]. Only attributes the
+     *  chip set itself are ever taken back, so an author's own role or
+     *  tabindex survives. */
+    _syncButton() {
+        const own = this._own || (this._own = {});
+        const set = (name, value) => {
+            if (value == null) {
+                if (own[name]) { this.removeAttribute(name); own[name] = false; }
+                return;
+            }
+            if (!own[name] && this.hasAttribute(name)) return;   // the author's
+            if (this.getAttribute(name) !== value) this.setAttribute(name, value);
+            own[name] = true;
+        };
+        const on = this.hasAttribute("clickable");
+        const off = this.disabled;
+        set("role", on ? "button" : null);
+        set("tabindex", on && !off ? "0" : null);
+        set("aria-pressed", on ? (this.hasAttribute("selected") ? "true" : "false") : null);
+        set("aria-disabled", on && off ? "true" : null);
     }
 
     attributeChangedCallback() {
@@ -73,7 +127,7 @@ class SacChip extends HTMLElement {
     }
 
     _render() {
-        // Remove button: tooltip and aria-label share one translation.
+        // Remove button: the tooltip; _relabel() names it after the chip.
         const esc = (s) => String(s).replace(/"/g, "&quot;");
         const L = { remove: esc(t("chip.remove", "Remove")) };
         this.shadowRoot.innerHTML = `
@@ -94,13 +148,18 @@ class SacChip extends HTMLElement {
                     color: var(--chip-color);
                     border: 1px solid color-mix(in srgb, var(--chip-color) 35%, transparent);
                     user-select: none;
-                    transition: background 120ms, border-color 120ms, transform 80ms;
+                    transition: background 120ms, border-color 120ms, transform 0.2s var(--ease-smooth);
                 }
                 :host([disabled]) { opacity: .5; pointer-events: none; }
                 :host([clickable]) { cursor: pointer; }
                 :host([clickable]:hover) {
                     background: color-mix(in srgb, var(--chip-color) 30%, transparent);
                     border-color: color-mix(in srgb, var(--chip-color) 55%, transparent);
+                }
+                /* Press: answers the moment it goes down. */
+                :host([clickable]:not([disabled]):active) {
+                    transform: scale(0.97);
+                    transition-duration: 0.1s;
                 }
                 :host([selected]) {
                     /* Translucent wash, not a solid fill — the ink follows
@@ -110,7 +169,17 @@ class SacChip extends HTMLElement {
                     color: var(--text);
                     box-shadow: 0 0 0 1px color-mix(in srgb, var(--chip-color) 60%, transparent);
                 }
+                /* Keyboard focus on a clickable chip: the kit ring. */
+                :host(:focus) { outline: none; }
+                :host([clickable]:focus-visible) {
+                    outline: 2px solid var(--accent);
+                    outline-offset: 2px;
+                }
                 .label { white-space: nowrap; }
+                /* Selected is not colour alone: a small check leads the label. */
+                .check { display: none; flex: none; margin-left: -2px; }
+                .check svg { width: 9px; height: 9px; display: block; }
+                :host([selected]) .check { display: inline-flex; }
                 .x {
                     display: none;
                     align-items: center;
@@ -133,6 +202,12 @@ class SacChip extends HTMLElement {
                 .x:hover {
                     opacity: 1;
                     background: color-mix(in srgb, var(--chip-color) 40%, transparent);
+                }
+                /* Press: one step stronger than the hover wash, at once. */
+                :host(:not([disabled])) .x:active {
+                    opacity: 1;
+                    background: color-mix(in srgb, var(--chip-color) 55%, transparent);
+                    transition-duration: 0s;
                 }
                 .x svg { width: 10px; height: 10px; }
 
@@ -179,6 +254,11 @@ class SacChip extends HTMLElement {
                     .x { opacity: 0.85; }
                 }
             </style>
+            <span class="check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </span>
             <span class="label"></span>
             <button type="button" class="x" title="${L.remove}" aria-label="${L.remove}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
@@ -204,6 +284,8 @@ class SacChip extends HTMLElement {
         const labelEl = this.shadowRoot.querySelector(".label");
         if (labelEl) labelEl.textContent = label;
         this.style.setProperty("--chip-color", `var(--palette-${color}, var(--palette-gray))`);
+        this._relabel();
+        this._syncButton();
     }
 }
 

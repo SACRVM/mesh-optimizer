@@ -123,11 +123,22 @@
     --radius-m: 4px;   /* controls: buttons, inputs, chips, menu items, tabs */
     --radius-l: 6px;   /* surfaces: panels, cards, tiles, windows, dialogs, popovers, toasts */
 
+    /* Monospace stack — kbd, logs, hex/date/time readouts, file names. One
+       token so every monospace surface (light DOM or shadow root — custom
+       properties inherit into both) stays in sync. Not theme-dependent. */
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
     /* Small ghost icon button — ONE measure for the light-DOM .icon-btn and
        the shadow buttons that must match it (sac-copy-button). Custom
        properties cross shadow roots; a class does not. 14/26 ≈ the kit's
        ~56% icon-to-box ratio. */
     --icon-btn-size: 26px;
+
+    /* Scrollbar measure — the kit bar's track and the air on each side of
+       its thumb (thumb = size − 2 × gap = 6px). Custom properties cross
+       shadow roots, so every shadow copy of the §5 recipe reads this pair. */
+    --scrollbar-size: 12px;
+    --scrollbar-gap:  3px;
     --icon-btn-icon: 14px;
 
     /* Tool button — ONE measure for <sac-toolbox>'s tools and the light-DOM
@@ -201,8 +212,17 @@ sac-window,
     /* Surfaces — accent-independent but direction-INdependent (the flipped
        seed already produces the right value), so these may live on the scopes. */
     --glass-hue:   color-mix(in srgb, var(--surface) 45%, var(--bg));   /* internal carrier  */
+    /* The glass, solid: what a blurred surface (--glass, --glass-strong, a
+       menu, a toast) shows instead under prefers-reduced-transparency or
+       prefers-contrast: more — same hue, nothing of the page shining through. */
+    --glass-solid: var(--glass-hue);
     --tile:        color-mix(in srgb, var(--surface) 70%, transparent);     /* launcher tiles    */
     --tile-hover:  color-mix(in srgb, var(--surface) 90%, transparent);
+    /* The ground under a window's content: glass is for the chrome (title
+       bar, toolbar, frame); text, chips and row actions sit on a near-opaque
+       ground, so a bright desktop tile behind the window cannot wash out
+       their contrast. 6% of the blurred backdrop still shows through. */
+    --window-ground: color-mix(in srgb, var(--surface) 94%, transparent);
 
     /* Text — two-step secondary: --text-muted carries real secondary
        information (AA on every plane); --text-dim is strictly tertiary,
@@ -215,6 +235,7 @@ sac-window,
     /* Lines + washes */
     --border:        color-mix(in srgb, var(--fg) 8%, transparent);
     --border-strong: color-mix(in srgb, var(--fg) 16%, transparent);
+    --border-contrast: color-mix(in srgb, var(--fg) 45%, transparent); /* edges under prefers-contrast: more */
     --hover:         color-mix(in srgb, var(--fg) 8%, transparent);   /* hover wash        */
     --hover-strong:  color-mix(in srgb, var(--fg) 14%, transparent);  /* active/press wash */
 
@@ -378,8 +399,8 @@ sac-window,
    with scrollable shadow content must duplicate these rules inside.
 
    Chromium and Safari draw the KIT's bar (::-webkit-scrollbar below): a
-   6px thumb with 2px of air on both sides, no arrow buttons, the same on
-   every OS. The standard pair (scrollbar-width/-color) is for Firefox ONLY:
+   6px thumb with 3px of air on every side (--scrollbar-size / -gap), no
+   arrow buttons, the same on every OS. The standard pair (scrollbar-width/-color) is for Firefox ONLY:
    since Chrome 121 a set scrollbar-color — which is INHERITED, even into
    shadow roots — makes Chrome ignore every ::-webkit-scrollbar rule and
    paint its native bar (on Windows: arrow buttons, the thumb off-centre in
@@ -391,12 +412,12 @@ sac-window,
         scrollbar-color: var(--scrollbar-thumb) transparent;
     }
 }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     background-clip: content-box;
-    border: 2px solid transparent;
+    border: var(--scrollbar-gap) solid transparent;
     border-radius: 999px;   /* a pill — the one rounded exception to the shape scale */
 }
 *::-webkit-scrollbar-thumb:hover {
@@ -434,9 +455,12 @@ html, body {
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Outfit', sans-serif;
     font-weight: 700;
-    letter-spacing: -0.02em;
     margin: 0;
 }
+/* Tracking follows size: display sizes tighten, small headings (h4–h6 sit
+   at body size) keep the face's own spacing. */
+h1, h2, h3 { letter-spacing: -0.02em; }
+h4, h5, h6 { letter-spacing: 0; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -539,6 +563,62 @@ input[type="checkbox"], input[type="radio"] {
     accent-color: var(--accent);
 }
 
+/* Field errors — the look of an invalid kit field, for plain fields too:
+   red text and a 1px --danger hairline under the field (never a thick
+   coloured border), and a line under it that says what IS expected
+   ("At most 100", "Not a valid date – e.g. 25.09.2026"). Wire it:
+     <input aria-invalid="true" aria-describedby="qty-error">
+     <div class="field-error" id="qty-error" aria-live="polite">At most 100</div>
+   Keep the .field-error element in the page and empty while the field is
+   valid (it collapses to nothing): a live region that is already there
+   announces new text reliably, one that appears with its text does not.
+   The kit fields (<sac-number-field>, <sac-date-field>, <sac-time-field>,
+   <sac-color-field>) do all of this themselves. Style guide → CSS Patterns
+   → Field errors. */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+    color: var(--danger-text);
+    border-bottom-color: var(--danger);
+}
+input[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus {
+    border-color: var(--accent);
+    border-bottom-color: var(--danger);
+}
+select[aria-invalid="true"] { border-bottom-color: var(--danger); }
+.field-error {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--danger-text);
+    text-transform: none;
+    letter-spacing: 0;
+}
+.field-error:empty { margin: 0; }
+
+/* .cell-input — a plain <input> / <textarea> as a cell editor (the
+   size="cell" look of the kit fields): borderless, fills its cell, the
+   cell's font, no own focus ring — the grid draws the cell's. A plain input
+   fires no sac:commit / sac:cancel; its host reads Enter / Escape / Tab
+   itself. Style guide → Components → Cell editors. */
+.cell-input,
+.cell-input:hover:not(:disabled),
+.cell-input:focus {
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0 var(--cell-padding-inline, 8px);
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline: none;
+}
+textarea.cell-input { padding-block: 6px; resize: none; }
+
 /* Table & kbd baseline — plain markup, no class required. */
 table {
     width: 100%;
@@ -550,7 +630,9 @@ th {
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-dim);
+    /* --text-muted: a column heading names what the column holds — real
+       information, so not the tertiary --text-dim. */
+    color: var(--text-muted);
     font-weight: 700;
     padding: 0.45rem 0.9rem 0.45rem 0;
     border-bottom: 1px solid var(--border-strong);
@@ -566,7 +648,7 @@ tbody tr:hover {
 }
 
 kbd {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 0.82em;
     background: var(--field);
     border: 1px solid var(--border-strong);
@@ -598,7 +680,9 @@ kbd {
     font-family: inherit;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    transition: all 0.2s ease;
+    /* Named, never `all`: a theme switch or a layout change must not animate. */
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+                box-shadow 0.2s ease, transform 0.2s var(--ease-smooth), opacity 0.2s ease;
     font-size: 0.7rem;
     display: flex;
     align-items: center;
@@ -613,12 +697,18 @@ kbd {
     background: var(--accent-fill);
     color: var(--on-accent);
     border-color: transparent;
-    transition: all 0.2s var(--ease-bounce);
 }
 .btn.primary:hover:not(:disabled) {
     background: var(--accent-strong);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--accent-glow);
+}
+/* Press: the button gives under the pointer the moment it goes down, not on
+   release — fast in (100ms), back at the normal pace. */
+.btn:active:not(:disabled),
+.btn.primary:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: 0.1s;
 }
 .btn.danger {
     background: var(--danger-fill);
@@ -661,7 +751,8 @@ kbd {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: all 0.2s var(--ease-smooth);
+    transition: background-color 0.2s var(--ease-smooth), color 0.2s var(--ease-smooth),
+                transform 0.2s var(--ease-smooth);
     padding: 0;
     /* 20/36 = the same ~56% ratio. A custom property crosses into
        <sac-icon>'s shadow root, which the `.nav-icon-btn svg` rule below
@@ -676,6 +767,7 @@ kbd {
 .nav-icon-btn:active {
     transform: translateY(0);
     background: var(--hover-strong);
+    transition-duration: 0.1s;
 }
 /* A light-DOM inline <svg> (rare now — host tools use <sac-icon>) follows the
    same --icon-size, so both icon forms come out the same size. */
@@ -719,7 +811,10 @@ a.nav-icon-btn { text-decoration: none; }
     border: none;
     border-radius: var(--radius-m);
     background: transparent;
-    color: var(--text-dim);
+    /* --text-muted, not --text-dim: a thin 14px glyph at rest must clear 3 : 1
+       against a window's glass in both themes (it is 5.1 : 1 in light, 6.7 : 1
+       in dark; --text-dim was 2.9 : 1 in light). */
+    color: var(--text-muted);
     font-family: inherit;
     cursor: pointer;
     transition: color 120ms var(--ease-smooth), background 120ms var(--ease-smooth);
@@ -773,6 +868,30 @@ a.nav-icon-btn { text-decoration: none; }
     color: var(--text-muted);
 }
 
+/* sac.contextMenu's reserved columns: a checkmark (a state) and an icon,
+   each as wide as the menu's 16px glyph, so every label starts in one
+   column — a checked entry, an icon entry and a plain one alike. */
+.sac-menu-check,
+.sac-menu-icon {
+    flex: none;
+    width: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    --icon-size: 16px;
+}
+
+/* sac.selection — rows of a list that marks several (kit/js/lib/selection.js).
+   No text selection or touch callout (Shift+click and a long-press would
+   start one); a marked row is the --accent-tint ground, its swapped icon
+   the accent. The keyboard cursor, where the open row doesn't show it (the
+   moving end of a Shift range), is a quiet --accent ring while the list
+   has focus. */
+[data-sac-row] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+[data-sac-row].marked { background: var(--accent-tint); }
+[data-sac-row].marked [data-sac-mark-icon] { color: var(--accent); }
+[data-sac-selection]:focus-within [data-sac-row][data-sac-cursor] { box-shadow: inset 0 0 0 1px var(--accent); }
+
 /* About window content — rendered by sac.about.open() into a <sac-window>.
    The one shared credits/licence surface: a host and an app both use it, so
    the two look related by construction. Reuses .sac-caption for the version
@@ -785,6 +904,19 @@ a.nav-icon-btn { text-decoration: none; }
 .sac-about-desc { margin: 0; color: var(--text-muted); }
 .sac-about-notice { display: flex; flex-direction: column; gap: 0.3rem; }
 .sac-about-notice p { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+.sac-about-panel[active] { display: flex; flex-direction: column; gap: 1rem; padding-top: 1rem; }
+.sac-about-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.5rem 1.5rem; margin: 0; }
+.sac-about-facts dt { color: var(--text-muted); }
+.sac-about-facts dd { margin: 0; overflow-wrap: anywhere; }
+/* Parts: name + one muted "licence · holder" line, in as many columns as fit. */
+.sac-about-parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem 2rem; }
+.sac-about-group { min-width: 0; }
+.sac-about-group h3 { margin: 0 0 0.25rem; }
+.sac-about-group ul { list-style: none; margin: 0; padding: 0; }
+.sac-about-group li { display: flex; flex-direction: column; padding: 0.3rem 0; min-width: 0; }
+.sac-about-group li + li { border-top: 1px solid var(--border); }
+.sac-about-part { font-weight: 600; }
+.sac-about-lic { color: var(--text-muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .card {
     background: var(--panel);
@@ -844,7 +976,7 @@ a.nav-icon-btn { text-decoration: none; }
     padding: 0.75rem;
     border-radius: var(--radius-m);
     border: 1px solid var(--border);
-    font-family: monospace;
+    font-family: var(--font-mono);
     -webkit-user-select: text;
     user-select: text;
 }
@@ -958,6 +1090,11 @@ a.nav-icon-btn { text-decoration: none; }
     background: var(--hover);
     color: var(--text);
 }
+.pagination button:active:not(:disabled),
+.pagination a:active:not(.disabled) {
+    background: var(--hover-strong);
+    transition-duration: 0s;
+}
 .pagination button.active,
 .pagination a.active,
 .pagination button[aria-current="page"],
@@ -1007,7 +1144,9 @@ a.nav-icon-btn { text-decoration: none; }
     font-weight: 600;
 }
 .empty-state p {
-    color: var(--text-dim);
+    /* --text-muted: the line that explains the empty panel (and usually how
+       to fill it) carries information — not the tertiary --text-dim. */
+    color: var(--text-muted);
     font-size: 0.85rem;
     margin: 0;
     max-width: 32ch;
@@ -1110,12 +1249,51 @@ a.nav-icon-btn { text-decoration: none; }
     margin: 0;
 }
 
+/* Tiles are SQUARE: medium 1×1, .wide 2 columns × 1 row (as tall as one
+   column is wide), .large 2×2. The columns stay auto-fill 280px-minimum and
+   stretch, so a cell's size is only known from the grid's own width: the
+   grid is a container, every child derives --tile-size from 100cqw and the
+   column count (--grid-cols, stepped below at exactly the widths where
+   auto-fill adds a column) and takes it as its height. Every row is then
+   one --tile-size tall whatever mixes in it. Items get the height, not the
+   rows — so never give a .grid an inline grid-auto-rows.
+   A ONE-column grid (a phone, a narrow window or panel) is a list, not a
+   stack of screen-wide squares: its tiles are cards of natural height. */
 .grid {
+    --grid-gap: 21px;   /* px, not rem: the column steps below are px (1.5rem at the kit's 14px root) */
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    grid-auto-rows: 280px;
-    gap: 1.5rem;
+    gap: var(--grid-gap);
+    /* inline-size containment: a .grid needs a block-level (full-width)
+       place, never a shrink-to-fit one — see section 15. */
+    container-type: inline-size;
 }
+.grid > * {
+    /* One-column cards are at least 150px tall — on the item, not the row,
+       so a row of small tiles (.tile-pack) keeps its own height. */
+    min-height: 150px;
+    --grid-cols: 1;
+    --grid-rows: 1;   /* rows the item spans — .large sets 2 */
+    --tile-size: calc((100cqw - (var(--grid-cols) - 1) * var(--grid-gap)) / var(--grid-cols));
+}
+/* n columns fit from n × 280px + (n − 1) × 21px.
+   From two columns on, every child is square (times its row span). */
+@container (width >= 581px) {
+    .grid > * {
+        --grid-cols: 2;
+        height: calc(var(--tile-size) * var(--grid-rows) + var(--grid-gap) * (var(--grid-rows) - 1));
+    }
+}
+@container (width >= 882px)  { .grid > * { --grid-cols: 3; } }
+@container (width >= 1183px) { .grid > * { --grid-cols: 4; } }
+@container (width >= 1484px) { .grid > * { --grid-cols: 5; } }
+@container (width >= 1785px) { .grid > * { --grid-cols: 6; } }
+@container (width >= 2086px) { .grid > * { --grid-cols: 7; } }
+@container (width >= 2387px) { .grid > * { --grid-cols: 8; } }
+@container (width >= 2688px) { .grid > * { --grid-cols: 9; } }
+@container (width >= 2989px) { .grid > * { --grid-cols: 10; } }
+@container (width >= 3290px) { .grid > * { --grid-cols: 11; } }
+@container (width >= 3591px) { .grid > * { --grid-cols: 12; } }
 
 .tile {
     position: relative;
@@ -1130,8 +1308,8 @@ a.nav-icon-btn { text-decoration: none; }
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    transition: transform 0.4s var(--ease-bounce), border-color 0.4s var(--ease-bounce),
-                box-shadow 0.4s var(--ease-bounce), background 0.4s var(--ease-bounce);
+    transition: transform 0.4s var(--ease-smooth), border-color 0.4s var(--ease-smooth),
+                box-shadow 0.4s var(--ease-smooth), background 0.4s var(--ease-smooth);
     overflow: hidden;
     cursor: pointer;
     /* Persistent compositor layer: without it the browser promotes the tile
@@ -1148,7 +1326,7 @@ a.nav-icon-btn { text-decoration: none; }
     --icon-size: 48px;
     margin-bottom: auto;
     color: var(--accent);
-    transition: transform 0.4s var(--ease-bounce);
+    transition: transform 0.4s var(--ease-smooth);
 }
 .tile h2 {
     font-size: 1.5rem;
@@ -1173,43 +1351,159 @@ a.nav-icon-btn { text-decoration: none; }
 .tile:hover > sac-icon {
     transform: scale(1.1) rotate(5deg);
 }
+/* Press: the lifted tile gives back half its lift at once — a push, not a
+   scale (see the text-jitter note above). */
+.tile:active {
+    transform: translateY(-4px) translateZ(0);
+    transition-duration: 0.1s;
+}
+/* Arranging tiles (sac.tiles.sortable). The grid carries
+   data-sortable-active for the length of a drag: the cursor is a grabbing
+   hand everywhere in it, and the tiles the lifted one passes over stay
+   still — no hover lift, ring or glow. The lifted tile itself is on top
+   with a strong shadow and the accent ring; its position and 1.03 scale
+   are the helper's inline transform. */
+[data-sortable-active],
+[data-sortable-active] * { cursor: grabbing !important; }
+[data-sortable-active] .tile:not([data-sortable-dragging]):hover,
+[data-arranging] .tile:not([data-sortable-dragging]):hover,
+[data-sortable-active] .tile:not([data-sortable-dragging]):active,
+[data-arranging] .tile:not([data-sortable-dragging]):active {
+    transform: translateZ(0);
+    border-color: var(--border-strong);
+    box-shadow: none;
+    background: var(--tile);
+}
+[data-sortable-active] .tile:hover > sac-icon,
+[data-arranging] .tile:hover > sac-icon { transform: none; }
 
-/* Variants */
-.tile.large { grid-column: span 2; }
+/* Arrange mode (sac.tiles.sortable arrange(), the iPhone's): the movable
+   tiles wiggle — on the `rotate` property, so the helper's slide and lift
+   transforms stay untouched — staggered so the wall doesn't swing in step.
+   A finger drags at once (touch-action none); a tap opens nothing. Under
+   reduced motion a dashed hairline says the same without moving. */
+@keyframes sac-wiggle { from { rotate: -1deg; } to { rotate: 1deg; } }
+@keyframes sac-wiggle-small { from { rotate: -1.6deg; } to { rotate: 1.6deg; } }
+[data-arranging] [data-arrangeable] {
+    animation: sac-wiggle 0.26s ease-in-out infinite alternate;
+    touch-action: none;
+    cursor: grab;
+}
+[data-arranging] [data-arrangeable].small { animation-name: sac-wiggle-small; }
+[data-arranging] [data-arrangeable]:nth-child(2n) { animation-delay: -0.13s; animation-duration: 0.3s; }
+[data-arranging] [data-arrangeable]:nth-child(3n) { animation-delay: -0.07s; animation-duration: 0.28s; }
+[data-arranging] [data-arrangeable][data-sortable-dragging] { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+    [data-arranging] [data-arrangeable] {
+        animation: none;
+        outline: 1px dashed var(--border-strong);
+        outline-offset: 3px;
+    }
+}
+/* The floating "Arrange · Done" pill, under the nav ribbon. */
+.sac-arrange-pill {
+    position: fixed;
+    top: calc(50px + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 18900;          /* over windows (10000–18999's top), under the nav drawer and dialogs */
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 6px 18px;
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    box-shadow: var(--shadow-2);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    animation: sac-pill-in 0.2s ease-out;
+}
+.sac-arrange-pill .btn { width: auto; border-radius: 999px; padding: 6px 16px; }
+@keyframes sac-pill-in { from { opacity: 0; translate: 0 -8px; } to { opacity: 1; translate: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sac-arrange-pill { animation: none; } }
+.tile[data-sortable-dragging] {
+    border-color: var(--accent);
+    background: var(--tile-hover);
+    box-shadow: var(--shadow-2), 0 24px 48px color-mix(in srgb, var(--sink) 40%, transparent);
+}
+
+/* Variants — footprints: .wide 2 columns × 1 row, .large 2 × 2. */
+.tile.wide  { grid-column: span 2; }
+.tile.large { grid-column: span 2; grid-row: span 2; --grid-rows: 2; }
+/* One column: a span-2 tile would invent a phantom second column. */
+@container (width < 581px) {
+    .grid > .tile.wide,
+    .grid > .tile.large { grid-column: auto; grid-row: auto; --grid-rows: 1; }
+}
+/* .small — a ninth of a medium: up to nine go in a .tile-pack, which
+   takes one medium cell and splits it 3×3 with the grid's own gap, so the
+   block lines up edge to edge with its neighbours and the rhythm of the
+   grid runs through it. Icon only: the h2 stays as the accessible name
+   (visually hidden) — give the tile a title for the tooltip. Small tiles
+   stay small on phones; a one-column grid lays the pack out as a wrapping
+   row of ~72px squares. */
+.tile-pack {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    min-width: 0;
+}
+.grid > .tile-pack { min-height: 0; }
+@container (width < 581px) {
+    .grid > .tile-pack {
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        grid-template-rows: auto;
+        align-self: start;
+    }
+    .tile-pack > .tile.small { aspect-ratio: 1; }
+}
+.tile.small {
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    /* ~90px: the large radius would read as a pill. */
+    border-radius: var(--radius-m);
+}
+.tile.small > sac-icon {
+    --icon-size: 32px;
+    margin: 0;
+}
+.tile.small h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+.tile.small p,
+.tile.small .tile-meta { display: none; }
+
 .tile.disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(1);
 }
-.tile.disabled:hover {
+.tile.disabled:hover,
+.tile.disabled:active {
     transform: none;
     border-color: var(--border-strong);
     box-shadow: none;
     background: var(--tile);
 }
-.tile-badge {
-    position: absolute;
-    top: 24px;
-    right: 24px;
-    background: color-mix(in srgb, var(--danger) 15%, transparent);
-    color: color-mix(in srgb, var(--danger) 70%, var(--fg));
-    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-    padding: 4px 10px;
-    border-radius: var(--radius-s);
-    font-size: 0.65rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-}
-.tile-badge.accent {
-    background: var(--accent-fill);
-    color: var(--on-accent);
-    border-color: transparent;
-}
-
 @media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
-    .tile.large { grid-column: span 1; }
-    .grid { grid-auto-rows: 240px; }
+    /* Compact: every footprint collapses to medium — a 2×2 tile would own
+       a whole tablet screen. Tiles stay square while the grid has two or
+       more columns (section 15 re-steps --grid-cols for the smaller gap). */
+    .grid > .tile.wide,
+    .grid > .tile.large { grid-column: auto; grid-row: auto; --grid-rows: 1; }
 }
 
 /* --------------------------------------------------------------------------
@@ -1453,6 +1747,9 @@ canvas.natural {
     .tile:hover > sac-icon { transform: none; }
     .btn.primary:hover:not(:disabled) { transform: none; box-shadow: none; }
     .nav-icon-btn:hover { transform: none; }
+    /* …but the press itself still shows (a touch is a hover too). */
+    .btn.primary:active:not(:disabled) { transform: scale(0.97); }
+    .tile:active { transform: translateY(2px) translateZ(0); }
 }
 
 @media (pointer: coarse) {
@@ -1485,6 +1782,11 @@ canvas.natural {
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
     select { min-height: 44px; }
     input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+    /* A cell editor stays in its cell (16px type, but no 44px floor). */
+    .cell-input:is(input, textarea):not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+        min-height: 0;
+        font-size: max(16px, 1em);
+    }
 }
 
 @media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
@@ -1494,11 +1796,20 @@ canvas.natural {
     .main-layout .hub-container { padding-top: 2rem; }
     .hub-container header { margin-bottom: 2rem; }
     .grid {
+        --grid-gap: 14px;
         grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-        /* A 240px tile in a single column is mostly empty space. */
-        grid-auto-rows: minmax(150px, auto);
-        gap: 1rem;
     }
+    /* The square steps again for the 14px gap: n × 280px + (n − 1) × 14px.
+       Later in the file than the desktop steps, so these win. */
+    @container (width >= 574px) {
+        .grid > * {
+            --grid-cols: 2;
+            height: calc(var(--tile-size) * var(--grid-rows) + var(--grid-gap) * (var(--grid-rows) - 1));
+        }
+    }
+    @container (width >= 868px)  { .grid > * { --grid-cols: 3; } }
+    @container (width >= 1162px) { .grid > * { --grid-cols: 4; } }
+    @container (width >= 1456px) { .grid > * { --grid-cols: 5; } }
     .tile { padding: 1.5rem; }
     .card { padding: 1rem; }
     .center-shell {
@@ -1527,6 +1838,7 @@ canvas.natural {
         translate: -105% 0;
         visibility: hidden;
         transition: translate 0.5s var(--ease-swift), visibility 0.5s;
+        touch-action: pan-y pinch-zoom;   /* sideways = sac-nav's swipe-to-close */
     }
     /* translate: none while open, not 0 — any transform makes the drawer the
        containing block of its position:fixed descendants (popovers). */
@@ -1540,7 +1852,8 @@ canvas.natural {
    above it. The column tile spends most of its height on the 48px mark;
    as a row the launcher shows twice the tiles per screen. */
 @media (max-width: 480px) {
-    .grid { grid-auto-rows: auto; gap: 0.75rem; }
+    .grid { --grid-gap: 0.75rem; }
+    .grid > * { min-height: 0; }
     .tile {
         flex-direction: row;
         align-items: flex-start;
@@ -1554,5 +1867,46 @@ canvas.natural {
         flex: none;
     }
     .tile h2 { font-size: 1.15rem; }
+    .tile.small { flex-direction: column; align-items: center; justify-content: center; padding: 0; }
+    .tile.small > sac-icon { --icon-size: 32px; }
     .hub-container .intro-text { font-size: 1rem; }
+}
+
+/* --------------------------------------------------------------------------
+   16. Reduced transparency, more contrast — global user preferences.
+   A blurred surface lets the page shine through; under either setting it
+   turns solid (--glass-solid: the same hue, opaque) and drops the blur, and
+   under prefers-contrast: more its edge becomes a clearly visible line
+   (--border-contrast). Last in the file, so it wins over the hover resets
+   above. NOTE: like section 14, this reaches the light DOM only — every
+   component carries the same two queries inside its shadow root.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+    .glass,
+    .floating-menu,
+    .sac-arrange-pill,
+    .center-card,
+    .tile,
+    .tile:hover {
+        background: var(--glass-solid);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+@media (prefers-contrast: more) {
+    .glass,
+    .floating-menu,
+    .sac-arrange-pill,
+    .center-card,
+    .tile,
+    .tile:hover {
+        background: var(--glass-solid);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+    .glass,
+    .floating-menu,
+    .sac-arrange-pill,
+    .center-card,
+    .tile { border-color: var(--border-contrast); }
 }

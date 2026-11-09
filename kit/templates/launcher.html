@@ -22,6 +22,9 @@
     <script defer src="../kit/js/lib/apps.js"></script>
     <script defer src="../kit/js/lib/hotkeys.js"></script>
     <script defer src="../kit/js/lib/color.js"></script>
+    <!-- drag reorder for the launcher tiles (optional — the move buttons
+         remain without it). -->
+    <script defer src="../kit/js/lib/sortable.js"></script>
     <script defer src="../kit/js/components/sac-icon.js"></script>
     <script defer src="../kit/js/components/sac-nav.js"></script>
     <script defer src="../kit/js/components/sac-footer.js"></script>
@@ -115,6 +118,15 @@
             });
 
             sac.apps.init();   // binds [data-app] tiles + ?app= deep links
+
+            // Link tiles: anything that already has an address (a
+            // sac.router route, another page) — no app registration.
+            // `menu` puts a "…" menu in the tile's corner.
+            // const hub = document.querySelector("sac-launcher");
+            // hub.setLinks([{ id: "notes", name: "Notes", icon: "note",
+            //                 href: "#/notes",
+            //                 menu: [{ label: "New note", icon: "plus",
+            //                          onClick: () => { /* … */ } }] }]);
         });
     </script>
 </body>

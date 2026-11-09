@@ -142,6 +142,13 @@
                     }
                     .cycle svg { width: 20px; height: 20px; }
                     .cycle:hover { background: var(--hover); color: var(--text); }
+                    /* Press (a segment or the cycle button): a wash the moment
+                       it goes down. The current segment keeps its fill; the
+                       specificity beats both (hover: none) resets. */
+                    button:active:not(.active) {
+                        background: var(--hover-strong);
+                        transition-duration: 0s;
+                    }
                     @media (max-width: 768px), (max-height: 480px) and (pointer: coarse) {
                         :host([in-nav]:not([collapse="never"])) .pill { display: none; }
                         :host([in-nav]:not([collapse="never"])) .cycle { display: inline-flex; }

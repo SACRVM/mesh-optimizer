@@ -492,6 +492,12 @@
                         color: var(--text);
                         background: var(--hover);
                     }
+                    /* Press: the strong wash, the moment it goes down. */
+                    .nav:active:not(:disabled) {
+                        color: var(--text);
+                        background: var(--hover-strong);
+                        transition-duration: 0s;
+                    }
                     .nav:focus-visible {
                         outline: 2px solid var(--accent);
                         outline-offset: 1px;
@@ -537,6 +543,10 @@
                                     color 0.15s var(--ease-smooth);
                     }
                     .day:not([aria-disabled="true"]):hover { background: var(--hover); }
+                    .day:not([aria-disabled="true"]):not([aria-selected="true"]):active {
+                        background: var(--hover-strong);
+                        transition-duration: 0s;
+                    }
                     .day.other { color: var(--text-dim); }
                     /* Today: a dot, not a border — it survives selection and
                        hover without fighting either. */

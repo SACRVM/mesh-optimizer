@@ -24,10 +24,15 @@
  * Behavior:
  *   Click copies via navigator.clipboard.writeText(). On success the icon
  *   swaps in place to "check" (--ok) for ~1.4s, then reverts to "copy"; a
- *   rapid re-click cancels the pending revert and restarts it. On failure
- *   (API rejected or unavailable) the icon swaps to "error" (--danger)
- *   briefly and the failure is logged via console.warn — sac:copy does not
- *   fire.
+ *   rapid re-click cancels the pending revert and restarts it, and a screen
+ *   reader hears "Copied" (a polite live region beside the button, re-said
+ *   on every copy). On failure (API rejected or unavailable) the icon swaps
+ *   to "error" (--danger) briefly, the failure is logged via console.warn,
+ *   and people are told what to do instead — "Couldn't copy – select the
+ *   text and press Ctrl+C" (the platform's keys, ⌘C on a Mac): a sac.toast
+ *   of kind "error" when the kit has one (seen and heard), else the live
+ *   region plus the button's tooltip for the error's duration. sac:copy
+ *   does not fire.
  *
  * The button is a native <button> in the shadow root, so focus and keyboard
  * activation come for free. Host is display: inline-flex.
@@ -100,7 +105,7 @@ class SacCopyButton extends HTMLElement {
                     border: none;
                     border-radius: var(--radius-m);
                     background: transparent;
-                    color: var(--text-dim);
+                    color: var(--text-muted);
                     cursor: pointer;
                     transition: color 120ms var(--ease-smooth), background 120ms var(--ease-smooth);
                 }
@@ -140,17 +145,40 @@ class SacCopyButton extends HTMLElement {
                     button.ok:hover:not(:disabled)  { background: transparent; color: var(--ok-text); }
                     button.err:hover:not(:disabled) { background: transparent; color: var(--danger-text); }
                 }
+                /* Press: answers the moment it goes down — placed after the
+                   (hover: none) reset, which it must beat (a touch is a
+                   hover too). The release eases back at the normal pace. */
+                button:active:not(:disabled),
+                button.ok:active:not(:disabled),
+                button.err:active:not(:disabled) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 @media (prefers-reduced-motion: reduce) {
                     button, sac-icon { transition: none; }
+                }
+                /* The outcome, for screen readers only. */
+                .sr {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    margin: -1px;
+                    padding: 0;
+                    overflow: hidden;
+                    clip: rect(0 0 0 0);
+                    white-space: nowrap;
+                    border: 0;
                 }
             </style>
             <button type="button" id="btn">
                 <sac-icon name="copy" id="icon"></sac-icon>
             </button>
+            <span class="sr" id="live" role="status"></span>
         `;
 
         this._btn = this.shadowRoot.getElementById("btn");
         this._icon = this.shadowRoot.getElementById("icon");
+        this._live = this.shadowRoot.getElementById("live");
         this._btn.addEventListener("click", this._onClick);
 
         this._syncLabel();
@@ -160,7 +188,22 @@ class SacCopyButton extends HTMLElement {
         if (!this._btn) return;
         const label = this.getAttribute("label") || t("copy-button.copy", "Copy");
         this._btn.setAttribute("aria-label", label);
-        this._btn.title = label;
+        // While a failure shows without a toast, the tooltip carries the advice.
+        this._btn.title = this._failTitle || label;
+    }
+
+    /** Polite: cleared, then set a frame later — a second copy is read too. */
+    _say(text) {
+        cancelAnimationFrame(this._sayRaf);
+        this._live.textContent = "";
+        if (text) this._sayRaf = requestAnimationFrame(() => { this._live.textContent = text; });
+    }
+
+    /** "Couldn't copy – select the text and press Ctrl+C", in the
+     *  platform's keys and the current language. */
+    _failText() {
+        const keys = (window.sac && sac.hotkeys && sac.hotkeys.format) ? sac.hotkeys.format("mod+c") : "Ctrl+C";
+        return t("copy-button.failed", "Couldn't copy – select the text and press {keys}").replace("{keys}", () => keys);
     }
 
     /* --------------------------------------------------------------- copy */
@@ -196,19 +239,36 @@ class SacCopyButton extends HTMLElement {
         this._btn.classList.remove("ok", "err");
         this._btn.classList.add(ok ? "ok" : "err");
         this._icon.setAttribute("name", ok ? "check" : "error");
+        this._failTitle = null;
 
+        let duration = ok ? 1400 : 1200;
         if (ok) {
+            this._say(t("copy-button.copied", "Copied"));
             this.dispatchEvent(new CustomEvent("sac:copy", {
                 detail: { text },
                 bubbles: true,
                 composed: true,
             }));
+        } else if (window.sac && typeof sac.toast === "function") {
+            // Seen and heard (an error toast is role="alert"); the live
+            // region stays quiet so it is not said twice.
+            this._say("");
+            sac.toast(this._failText(), { kind: "error" });
+        } else {
+            // No toast module: say it, and keep the advice on the tooltip
+            // a while longer than the icon swap.
+            const msg = this._failText();
+            this._say(msg);
+            this._failTitle = msg;
+            duration = 4000;
         }
+        this._syncLabel();
 
-        const duration = ok ? 1400 : 1200;
         this._stateTimer = setTimeout(() => {
             this._btn.classList.remove("ok", "err");
             this._icon.setAttribute("name", "copy");
+            this._failTitle = null;
+            this._syncLabel();
             this._stateTimer = null;
         }, duration);
     }

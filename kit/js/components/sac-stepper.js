@@ -18,12 +18,22 @@
  * DOM IN PLACE — never re-render it (same rule as sac-slider; re-rendering
  * would drop focus/selection out of the value field mid-edit).
  *
+ * Number format: the value field SHOWS and reads the page-wide
+ * sac.regional number format's decimal separator ("2,5" under "1.234,5",
+ * followed live), like <sac-number-field> — without group separators, so
+ * the pill keeps its width. Typing is tolerant: "2,5" and "2.5" both mean
+ * 2.5 there (sac.regional.parseNumber). The `value` attribute stays a plain
+ * JS number string ("2.5") whatever the format. Without lib/globals.js the
+ * field shows "2.5" and still reads "2,5".
+ *
  * Attributes (all observed):
  *   value    — current number, reflected, clamped/snapped on every change.
  *   min      — default 0.
  *   max      — default 100.
  *   step     — default 1. Fractional steps (e.g. "0.1") are supported; the
  *              displayed/reflected value keeps that many decimal places.
+ *   decimals — minimum decimal places shown ("1.00" with decimals="2" on a
+ *              0.5 step). Never fewer than the step needs.
  *   unit     — optional word shown dim next to the value ("parts", "px").
  *   label    — accessible name for the value field (its aria-label).
  *   disabled — presence disables both buttons and the value field.
@@ -45,12 +55,17 @@
  *   - Click ± steps by `step`. Press and hold: after 400ms, repeats every
  *     60ms until release (pointerup/leave/cancel) or the value reaches its
  *     bound (the button disables itself and the repeat stops on its own).
- *   - The value field accepts digits, a leading "-" and one "." while
- *     typing; Enter or blur commits (parses, clamps, snaps to the step
- *     grid); Escape reverts the displayed text to the last committed value
- *     without committing.
+ *   - The value field accepts digits, a leading "-", "." and "," while
+ *     typing (before 2.36 a "," was dropped: "2,5" became 25); Enter or
+ *     blur commits (parses, clamps, snaps to the step grid); Escape reverts
+ *     the displayed text to the last committed value without committing.
  *   - ArrowUp/ArrowDown on the value field step by `step`; Shift steps by
  *     10× that.
+ *
+ * Width: the value field sizes itself to the widest value the range can
+ * show (min, max, at the displayed precision), never below 3ch — "12.50"
+ * or "-0.356" are never cut off. Override with --stepper-value-width on the
+ * element; ::part(value) reaches the field itself.
  *
  * Compact/touch: the ± buttons are pointer-event driven (press-and-hold works
  * with a finger; a long press never opens the context menu). Under
@@ -73,9 +88,12 @@
     const t = (key, fallback) =>
         (window.sac && window.sac.t) ? window.sac.t(key, fallback) : fallback;
 
+    /** sac.regional when globals.js is loaded (the page's number format). */
+    const reg = () => (window.sac && sac.regional && sac.regional.parseNumber) ? sac.regional : null;
+
 class SacStepper extends HTMLElement {
     static get observedAttributes() {
-        return ["value", "min", "max", "step", "unit", "label", "disabled"];
+        return ["value", "min", "max", "step", "decimals", "unit", "label", "disabled"];
     }
 
     constructor() {
@@ -94,11 +112,20 @@ class SacStepper extends HTMLElement {
         this._syncAll();
         // Runtime language switch: relabel the ± buttons in place.
         if (window.sac && sac.lang && !this._offLang) this._offLang = sac.lang.onChange(() => this._relabel());
+        // Page-wide number format switch: re-show in place (typing survives).
+        if (reg() && !this._offRegional) {
+            this._offRegional = sac.regional.onChange(() => {
+                this._syncWidth();
+                this._syncDisplay();
+                this._syncAria();
+            });
+        }
     }
 
     disconnectedCallback() {
         this._clearHold();
         if (this._offLang) { this._offLang(); this._offLang = null; }
+        if (this._offRegional) { this._offRegional(); this._offRegional = null; }
     }
 
     /** Kit strings in the current language, on the existing buttons. */
@@ -115,6 +142,7 @@ class SacStepper extends HTMLElement {
             case "min":
             case "max":
             case "step":
+            case "decimals":
                 this._applyValue();
                 break;
             case "unit":
@@ -165,6 +193,12 @@ class SacStepper extends HTMLElement {
         return i === -1 ? 0 : s.length - i - 1;
     }
 
+    /** Displayed decimal places: the step's, raised by `decimals`. */
+    _decimals() {
+        const d = parseInt(this.getAttribute("decimals"), 10);
+        return Math.max(this._stepDecimals(), Number.isFinite(d) && d > 0 ? Math.min(d, 10) : 0);
+    }
+
     /** Clamp into [min, max] AND snap to the nearest valid step measured
      *  from min — the one place every value in this component passes
      *  through, so the reflected attribute is always on-grid and in-range. */
@@ -172,7 +206,7 @@ class SacStepper extends HTMLElement {
         const min = this._minAttr();
         const max = this._maxAttr();
         const step = this._stepAttr();
-        const decimals = this._stepDecimals();
+        const decimals = this._decimals();
         let v = Number.isFinite(n) ? n : min;
         v = min + Math.round((v - min) / step) * step;
         v = Math.min(max, Math.max(min, v));
@@ -186,9 +220,27 @@ class SacStepper extends HTMLElement {
         return this._clamp(raw == null ? NaN : parseFloat(raw));
     }
 
+    /** n as the `value` attribute carries it: a plain JS number string. */
     _format(n) {
-        const decimals = this._stepDecimals();
+        const decimals = this._decimals();
         return decimals > 0 ? n.toFixed(decimals) : String(Math.round(n));
+    }
+
+    /** n as the value field shows it: the sac.regional decimal separator,
+     *  no grouping (the pill keeps its width); _format without globals.js. */
+    _text(n) {
+        const r = reg();
+        if (!r) return this._format(n);
+        if (n === 0) n = 0;                                   // no "-0"
+        return r.formatNumber(n, { decimals: this._decimals(), group: false });
+    }
+
+    /** Typed text → number (NaN for garbage). Both "2,5" and "2.5" read. */
+    _parseText(s) {
+        const r = reg();
+        if (r) return r.parseNumber(s);
+        const n = parseFloat(String(s).replace(",", "."));
+        return Number.isFinite(n) ? n : NaN;
     }
 
     /* ---------------------------------------------------------- rendering */
@@ -271,7 +323,7 @@ class SacStepper extends HTMLElement {
                     padding: 0 2px;
                 }
                 .value-input {
-                    width: 3ch;
+                    width: var(--stepper-value-width, var(--_auto-width, 3ch));
                     box-sizing: content-box;
                     border: none;
                     background: transparent;
@@ -343,7 +395,7 @@ class SacStepper extends HTMLElement {
             <div class="stepper">
                 <button type="button" class="btn minus" aria-label="${L.decrease}"><span class="glyph" aria-hidden="true">−</span></button>
                 <span class="center">
-                    <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" class="value-input" role="spinbutton" />
+                    <input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" class="value-input" part="value" role="spinbutton" />
                     <span class="unit"></span>
                 </span>
                 <button type="button" class="btn plus" aria-label="${L.increase}"><span class="glyph" aria-hidden="true">+</span></button>
@@ -384,16 +436,27 @@ class SacStepper extends HTMLElement {
             this.setAttribute("value", formatted);   // re-enters via attributeChangedCallback, now canonical
             return;
         }
+        this._syncWidth();
         this._syncDisplay();
         this._syncAria();
         this._syncButtons();
+    }
+
+    /** Fit the field to the widest value the range can show; a fractional
+     *  range gets the decimal keypad on touch. */
+    _syncWidth() {
+        if (!this._input) return;
+        const chars = Math.max(3,
+            this._text(this._minAttr()).length, this._text(this._maxAttr()).length);
+        this._input.style.setProperty("--_auto-width", `${chars}ch`);
+        this._input.inputMode = this._decimals() > 0 ? "decimal" : "numeric";
     }
 
     /** Never clobbers text the user is actively typing. */
     _syncDisplay() {
         if (!this._input) return;
         if (this.shadowRoot.activeElement === this._input) return;
-        this._input.value = this._format(this._numValue());
+        this._input.value = this._text(this._numValue());
     }
 
     _syncAria() {
@@ -402,8 +465,11 @@ class SacStepper extends HTMLElement {
         this._input.setAttribute("aria-valuemin", String(this._minAttr()));
         this._input.setAttribute("aria-valuemax", String(this._maxAttr()));
         this._input.setAttribute("aria-valuenow", String(clamped));
+        // valuetext = what the field shows ("2,5"), with the unit when set.
         const unit = this.getAttribute("unit");
-        if (unit) this._input.setAttribute("aria-valuetext", `${this._format(clamped)} ${unit}`);
+        const shown = this._text(clamped);
+        if (unit) this._input.setAttribute("aria-valuetext", `${shown} ${unit}`);
+        else if (shown !== String(clamped)) this._input.setAttribute("aria-valuetext", shown);
         else this._input.removeAttribute("aria-valuetext");
     }
 
@@ -443,7 +509,7 @@ class SacStepper extends HTMLElement {
         const previous = this._numValue();
         const clamped = this._clamp(rawNumber);
         this.setAttribute("value", this._format(clamped));
-        if (forceDisplay && this._input) this._input.value = this._format(clamped);
+        if (forceDisplay && this._input) this._input.value = this._text(clamped);
         if (clamped !== previous) {
             this.dispatchEvent(new CustomEvent("sac:change", {
                 detail: { value: clamped },
@@ -515,10 +581,10 @@ class SacStepper extends HTMLElement {
         const before = input.value;
         const pos = input.selectionStart;
 
-        let cleaned = before.replace(/[^0-9.\-]/g, "");
+        // Digits, a leading "-", and both separators — "," is the decimal
+        // separator in half the world; parseNumber sorts out which is which.
+        let cleaned = before.replace(/[^0-9.,\-]/g, "");
         cleaned = cleaned[0] === "-" ? "-" + cleaned.slice(1).replace(/-/g, "") : cleaned.replace(/-/g, "");
-        const dot = cleaned.indexOf(".");
-        if (dot !== -1) cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, "");
 
         if (cleaned !== before) {
             input.value = cleaned;
@@ -533,7 +599,7 @@ class SacStepper extends HTMLElement {
             this._commitTyped();
         } else if (e.key === "Escape") {
             e.preventDefault();
-            this._input.value = this._format(this._numValue());   // revert display only — no commit
+            this._input.value = this._text(this._numValue());     // revert display only — no commit
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
             e.preventDefault();
             const dir = e.key === "ArrowUp" ? 1 : -1;
@@ -543,11 +609,11 @@ class SacStepper extends HTMLElement {
     }
 
     _commitTyped() {
-        const parsed = parseFloat(this._input.value);
+        const parsed = this._parseText(this._input.value);
         if (Number.isFinite(parsed)) {
             this._commitUser(parsed, { forceDisplay: true });
         } else {
-            this._input.value = this._format(this._numValue());   // garbage typed — revert, no event
+            this._input.value = this._text(this._numValue());     // garbage typed — revert, no event
         }
     }
 }

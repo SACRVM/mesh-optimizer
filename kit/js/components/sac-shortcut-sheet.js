@@ -313,6 +313,8 @@ class SacShortcutSheet extends HTMLElement {
                     --icon-size: var(--icon-btn-icon, 14px);
                 }
                 .close:hover { background: var(--hover); color: var(--text); }
+                /* Press: answers the moment it goes down. */
+                .close:active { background: var(--hover-strong); }
                 .close:focus-visible, .body:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;
@@ -327,12 +329,12 @@ class SacShortcutSheet extends HTMLElement {
                     font-size: 0.85rem;
                     line-height: 1.4;
                 }
-                .body::-webkit-scrollbar { width: 10px; height: 10px; }
+                .body::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
                 .body::-webkit-scrollbar-track { background: transparent; }
                 .body::-webkit-scrollbar-thumb {
                     background: var(--scrollbar-thumb);
                     background-clip: content-box;
-                    border: 2px solid transparent;
+                    border: var(--scrollbar-gap) solid transparent;
                     border-radius: 999px;
                 }
                 .body::-webkit-scrollbar-thumb:hover {
@@ -369,7 +371,7 @@ class SacShortcutSheet extends HTMLElement {
                 }
                 /* The ui.css kbd recipe, re-stated for the shadow root. */
                 kbd {
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    font-family: var(--font-mono);
                     font-size: 0.95em;
                     background: var(--field);
                     border: 1px solid var(--border-strong);
@@ -405,6 +407,18 @@ class SacShortcutSheet extends HTMLElement {
                 }
                 @media (prefers-reduced-motion: reduce) {
                     .backdrop, .panel { animation-duration: 1ms; }
+                }
+                /* Reduced transparency / more contrast: the panel turns
+                   solid (same hue, nothing shining through) and drops the
+                   blur. The backdrop is a scrim — it keeps its dim and only
+                   loses the blur. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+                    .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    .backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+                    .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--border-contrast); }
                 }
             </style>
             <div class="backdrop" part="backdrop"></div>

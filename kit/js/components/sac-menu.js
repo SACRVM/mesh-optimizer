@@ -19,8 +19,10 @@
  * viewport, and re-anchors on scroll/resize while open.
  *
  * Items are plain <button data-action="…"> elements — an <hr> between them
- * draws a separator, `data-danger` tints the hover state red. Anything else
- * you slot (headers, spans) is left alone.
+ * draws a separator, `data-danger` tints the hover state red, `hidden`
+ * hides an item (toggle it at runtime; hidden items are skipped by the
+ * arrow keys and by sac-nav's "…" fold). Anything else you slot (headers,
+ * spans) is left alone.
  *
  * Attributes:
  *   open — presence = panel visible. Reflected by open()/close()/toggle();
@@ -44,7 +46,9 @@
  *
  * Events:
  *   sac:select — detail { action } — the clicked item's data-action.
- *                     Bubbles + composed. The menu closes right after.
+ *                     Bubbles + composed. Fired after the menu has closed
+ *                     (and, if focus was in the menu, handed it back), so a
+ *                     dialog opened from the handler returns focus there.
  *
  * Slots:
  *   trigger — the element that opens the menu (a .btn, an icon button, …).
@@ -54,6 +58,7 @@
  * Keyboard (while open):
  *   ArrowDown / ArrowUp — move focus between items (wraps, skips [disabled])
  *   Enter               — activates the focused item (native button click)
+ *                         and returns focus to the trigger
  *   Escape              — closes and returns focus to the trigger
  *   Tab                 — closes and lets focus move on
  *
@@ -105,7 +110,9 @@ class SacMenu extends HTMLElement {
         this._syncTrigger();
         if (this.hasAttribute("open")) {
             this._raise();                         // top layer first: it must be
-            this._position();                      // measurable before anchoring
+            this._opening = true;                  // measurable before anchoring
+            this._position();
+            this._opening = false;
         } else {
             this._lower();
             this._clearHighlight();
@@ -133,7 +140,7 @@ class SacMenu extends HTMLElement {
     openAt(point) {
         const x = Number(point && point.clientX), y = Number(point && point.clientY);
         if (!Number.isFinite(x) || !Number.isFinite(y)) { this.open(); return; }
-        if (!this.hasAttribute("open")) this._restoreFocus = document.activeElement;
+        if (!this.hasAttribute("open")) this._restoreFocus = SacMenu._deepActive();
         this._point = { x, y };
         if (this.hasAttribute("open")) this._position();   // re-open elsewhere
         else this.setAttribute("open", "");
@@ -193,14 +200,21 @@ class SacMenu extends HTMLElement {
 
                     opacity: 0;
                     visibility: hidden;            /* keeps items out of the tab order while closed */
+                    /* visibility flips only at the END of its transition, so a
+                       closing panel would still catch clicks during the fade
+                       (a second right-click on a context-menu spot). */
+                    pointer-events: none;
                     transform: translateY(-4px);
                     transition: opacity 120ms var(--ease-smooth),
                                 transform 120ms var(--ease-smooth),
                                 visibility 120ms var(--ease-smooth);
                 }
+                /* Above its anchor it comes up out of the trigger instead. */
+                .panel[data-up] { transform: translateY(4px); }
                 :host([open]) .panel {
                     opacity: 1;
                     visibility: visible;
+                    pointer-events: auto;
                     transform: translateY(0);
                 }
                 /* Out of the top layer = out of layout. A closed panel that
@@ -220,6 +234,7 @@ class SacMenu extends HTMLElement {
                         opacity: 0;
                         transform: translateY(-4px);
                     }
+                    :host([open]) .panel[data-up] { transform: translateY(4px); }
                 }
                 @media (prefers-reduced-motion: reduce) {
                     .panel,
@@ -232,8 +247,10 @@ class SacMenu extends HTMLElement {
                 /* NOTE: document styles beat ::slotted() styles for slotted
                    light-DOM children regardless of specificity (CSS scoping
                    cascade order) — ui.css's global button rule would wipe
-                   these. !important is the intended mechanism here. */
-                ::slotted(button) {
+                   these. !important is the intended mechanism here.
+                   Scoped to the panel's slot: the trigger is a slotted button
+                   too, and it keeps its own look (a .btn, an icon button). */
+                .panel ::slotted(button) {
                     display: flex !important;
                     align-items: center;
                     gap: 0.6rem;
@@ -248,21 +265,31 @@ class SacMenu extends HTMLElement {
                     text-align: left;
                     cursor: pointer;
                 }
-                ::slotted(button:hover),
-                ::slotted(button.hl) {
+                .panel ::slotted(button:hover),
+                .panel ::slotted(button.hl) {
                     background: var(--hover) !important;
                     color: var(--text) !important;
                 }
-                ::slotted(button[data-danger]:hover),
-                ::slotted(button[data-danger].hl) {
+                .panel ::slotted(button[data-danger]:hover),
+                .panel ::slotted(button[data-danger].hl) {
                     background: color-mix(in srgb, var(--danger) 14%, transparent) !important;
                     color: var(--danger-text) !important;
                 }
-                ::slotted(button[disabled]) {
+                /* Press: the row answers the moment it goes down. */
+                .panel ::slotted(button:active:not([disabled])) {
+                    background: var(--hover-strong) !important;
+                }
+                .panel ::slotted(button[data-danger]:active:not([disabled])) {
+                    background: color-mix(in srgb, var(--danger) 22%, transparent) !important;
+                }
+                /* The !important display above would otherwise defeat the
+                   hidden attribute — a hidden item must stay hidden. */
+                .panel ::slotted([hidden]) { display: none !important; }
+                .panel ::slotted(button[disabled]) {
                     opacity: 0.3;
                     cursor: not-allowed;
                 }
-                ::slotted(hr) {
+                .panel ::slotted(hr) {
                     border: none;
                     border-top: 1px solid var(--border);
                     margin: 4px 2px;
@@ -272,7 +299,21 @@ class SacMenu extends HTMLElement {
                 /* Touch: a 44px row per item. The look stays a menu row — only
                    the height grows. */
                 @media (pointer: coarse) {
-                    ::slotted(button) { min-height: 44px; }
+                    .panel ::slotted(button) { min-height: 44px; }
+                }
+
+                /* Reduced transparency / more contrast: solid glass, no blur,
+                   and under more contrast a clearly visible edge. */
+                @media (prefers-reduced-transparency: reduce) {
+                    .panel { background: var(--glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+                }
+                @media (prefers-contrast: more) {
+                    .panel {
+                        background: var(--glass-solid);
+                        backdrop-filter: none;
+                        -webkit-backdrop-filter: none;
+                        border-color: var(--border-contrast);
+                    }
                 }
             </style>
             <span class="trigger"><slot name="trigger"></slot></span>
@@ -370,6 +411,25 @@ class SacMenu extends HTMLElement {
 
         this._panel.style.top  = `${top}px`;
         this._panel.style.left = `${left}px`;
+        this._setDirection(openUp);
+    }
+
+    /** Opened above its anchor, the panel unfolds upwards — out of the
+     *  trigger, never towards it — and leaves the same way ([data-up]).
+     *  The entry's start was fixed when the panel was first measured, under
+     *  the last opening's direction: when that differs, start it again. */
+    _setDirection(up) {
+        const p = this._panel;
+        if (p.hasAttribute("data-up") === up) return;
+        p.toggleAttribute("data-up", up);
+        if (!this._opening) return;
+        p.style.transition = "none";
+        p.style.opacity = "0";
+        p.style.transform = `translateY(${up ? 4 : -4}px)`;
+        void p.offsetWidth;                        // commit the start…
+        p.style.transition = "";
+        p.style.opacity = "";
+        p.style.transform = "";                    // …and let it run from there
     }
 
     /** Context-menu placement: top-left at the point, flipped left / up
@@ -383,6 +443,7 @@ class SacMenu extends HTMLElement {
         top  = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
         this._panel.style.top  = `${top}px`;
         this._panel.style.left = `${left}px`;
+        this._setDirection(top < y);
     }
 
     /* -------------------------------------------------------------- items */
@@ -391,14 +452,17 @@ class SacMenu extends HTMLElement {
     _items() {
         if (!this._itemSlot) return [];
         return this._itemSlot.assignedElements({ flatten: true })
-            .filter(el => el.matches("button:not([disabled])"));
+            .filter(el => el.matches("button:not([disabled]):not([hidden])"));
     }
 
-    /** Tag slotted buttons as menuitems so role="menu" is complete for AT. */
+    /** Tag slotted buttons as menuitems so role="menu" is complete for AT
+     *  (a menuitemcheckbox / menuitemradio the author set stays one). */
     _syncItems() {
         if (!this._itemSlot) return;
         for (const el of this._itemSlot.assignedElements({ flatten: true })) {
-            if (el.matches("button")) el.setAttribute("role", "menuitem");
+            if (el.matches("button") && !/^menuitem(checkbox|radio)$/.test(el.getAttribute("role") || "")) {
+                el.setAttribute("role", "menuitem");
+            }
         }
     }
 
@@ -411,10 +475,19 @@ class SacMenu extends HTMLElement {
         if (el) el.classList.add("hl");
     }
 
+    /** The focused element itself, down through open shadow roots —
+     *  document.activeElement only names the outermost host, so inside
+     *  another component's shadow root it is never one of our items. */
+    static _deepActive() {
+        let a = document.activeElement;
+        while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+        return a;
+    }
+
     _moveFocus(delta) {
         const items = this._items();
         if (items.length === 0) return;
-        const current = items.indexOf(document.activeElement);
+        const current = items.indexOf(SacMenu._deepActive());
         const next = current === -1
             ? (delta > 0 ? 0 : items.length - 1)
             : (current + delta + items.length) % items.length;
@@ -438,12 +511,20 @@ class SacMenu extends HTMLElement {
             n.getAttribute("slot") !== "trigger"
         );
         if (!btn || btn.disabled) return;
+        // Focus on a (soon hidden) item goes back where it came from, as on
+        // Escape. Before the event: a dialog opened by the handler then
+        // remembers the trigger, not a hidden item.
+        const active = SacMenu._deepActive();
+        const hadFocus = !!active && (active === this || this.contains(active) ||
+            this.shadowRoot.contains(active));
+        this.close();
+        if (hadFocus) this._focusTrigger();
+        else this._restoreFocus = null;
         this.dispatchEvent(new CustomEvent("sac:select", {
             detail: { action: btn.dataset.action },
             bubbles: true,
             composed: true,
         }));
-        this.close();
     }
 
     /* ----------------------------------------------------------- listeners */

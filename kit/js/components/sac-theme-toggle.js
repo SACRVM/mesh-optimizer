@@ -60,7 +60,9 @@ class SacThemeToggle extends HTMLElement {
     connectedCallback() {
         if (!this.shadowRoot.firstChild) this._render();
         this.toggleAttribute("in-nav", !!this.closest("sac-nav"));
-        const stored = localStorage.getItem("sac-theme");
+        // Storage can refuse (private mode, a sandboxed frame): no stored choice.
+        let stored = null;
+        try { stored = localStorage.getItem("sac-theme"); } catch (err) { /* none */ }
         const theme = stored === "light" || stored === "auto" ? stored : "dark";
         this._apply(theme);
         this._theme = theme;
@@ -99,8 +101,10 @@ class SacThemeToggle extends HTMLElement {
     }
 
     _persist(theme) {
-        if (theme === "dark") localStorage.removeItem("sac-theme");
-        else localStorage.setItem("sac-theme", theme);
+        try {
+            if (theme === "dark") localStorage.removeItem("sac-theme");
+            else localStorage.setItem("sac-theme", theme);
+        } catch (err) { /* storage refused — the choice still applies to this page */ }
     }
 
     /** Update the active button in place — no re-render. */
@@ -210,6 +214,13 @@ class SacThemeToggle extends HTMLElement {
                 .cycle[data-current="light"] .i-light,
                 .cycle[data-current="auto"]  .i-auto { display: block; }
                 .cycle:hover { background: var(--hover); color: var(--text); }
+                /* Press (a segment or the cycle button): a wash the moment it
+                   goes down. The current segment keeps its fill; the
+                   specificity beats both (hover: none) resets below. */
+                button:active:not(.active) {
+                    background: var(--hover-strong);
+                    transition-duration: 0s;
+                }
                 button:focus-visible {
                     outline: 2px solid var(--accent);
                     outline-offset: 2px;
