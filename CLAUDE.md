@@ -165,10 +165,12 @@ toast per `sac:rejected` (2.36). Checked and n/a here: `sac-log`,
 viewport), `sac-dialog` (only `sac.dialog.confirm`), explicit toast
 durations (only the engine-load error, `duration: 0` on purpose).
 
-Version skew: hosted on the desktop the app runs on the host's kit
-(desktop.sacrvm.dev served 2.29.0 on 2026-11-09), so the 2.36 behaviour
-(quiet zone, `detail.rejected`) appears only once `sacrvm-desktop`
-re-vendors. The snippet falls back to the bare `files` list of an older kit.
+Version skew: hosted on the desktop the app runs on the host's kit, not on
+`kit/` — it can be older or newer. Check it before a hosted test:
+`https://desktop.sacrvm.dev/kit/VERSION`. Every feature above names the kit
+it needs (≥ 2.15 overlay, ≥ 2.29 long-press opt-out, ≥ 2.36 quiet zone and
+`detail.rejected`); on an older host kit it does nothing harmful, and the
+drop-zone snippet falls back to the bare `files` list.
 
 Known / owner decisions open:
 - **Accent colour:** still the kit default blue (no own identity). Owner
